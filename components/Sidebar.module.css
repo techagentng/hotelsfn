@@ -1,0 +1,49 @@
+.sidebarOpen {
+  width: 220px;
+  color: #fff;
+  transition: width 0.2s;
+  min-height: 100vh;
+  padding: 0;
+  margin: 0;
+  border: none;
+}
+.sidebarClosed {
+  width: 60px;
+  color: #fff;
+  transition: width 0.2s;
+  min-height: 100vh;
+  padding: 0;
+  margin: 0;
+  border: none;
+}
+.toggleBtn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 2rem;
+  margin: 0;
+  cursor: pointer;
+}
+.sidebarNav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.sidebarNav li {
+  margin: 0;
+  padding: 0;
+}
+.sidebarNav a {
+  color: #374151;
+  text-decoration: none;
+  font-size: 1.1rem;
+  padding: 0.5rem 1rem;
+  display: block;
+  border-radius: 4px;
+  transition: background 0.15s;
+  margin: 0;
+}
+.sidebarNav a:hover {
+  background: #444;
+  color: #fff;
+}
