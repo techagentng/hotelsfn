@@ -32,8 +32,8 @@ export const useGetGuestInfo = (roomNumber: string) => {
   return useQuery({
     queryKey: tabletKeys.guestInfo(roomNumber),
     queryFn: async () => {
-      const { data } = await axios.get(`/tablet/room/${roomNumber}/guest`);
-      return data.data as GuestRoomInfo;
+      const response = await axios.get(`/rooms/guest/${roomNumber}`);
+      return response.data.data as GuestRoomInfo;
     },
     enabled: !!roomNumber,
   });
@@ -44,10 +44,10 @@ export const useGetMenu = (category?: string) => {
   return useQuery({
     queryKey: category ? tabletKeys.menuByCategory(category) : tabletKeys.menu(),
     queryFn: async () => {
-      const { data } = await axios.get('/room-service/menu', {
+      const response = await axios.get('/room-service/menu', {
         params: category ? { category, available: true } : { available: true },
       });
-      return data.data as MenuItem[];
+      return response.data.data as MenuItem[];
     },
   });
 };
@@ -57,8 +57,8 @@ export const useGetMenuCategories = () => {
   return useQuery({
     queryKey: tabletKeys.categories(),
     queryFn: async () => {
-      const { data } = await axios.get('/room-service/menu/categories');
-      return data.data as MenuCategory[];
+      const response = await axios.get('/room-service/menu/categories');
+      return response.data.data as MenuCategory[];
     },
   });
 };
@@ -68,8 +68,8 @@ export const useGetActiveOrders = (guestId: number) => {
   return useQuery({
     queryKey: tabletKeys.activeOrders(guestId),
     queryFn: async () => {
-      const { data } = await axios.get(`/room-service/orders/guest/${guestId}/active`);
-      return data.data;
+      const response = await axios.get(`/room-service/orders/guest/${guestId}/active`);
+      return response.data.data;
     },
     enabled: !!guestId,
     refetchInterval: 30000, // Refresh every 30 seconds
@@ -81,8 +81,8 @@ export const useGetOrderStatus = (orderId: number) => {
   return useQuery({
     queryKey: tabletKeys.orderStatus(orderId),
     queryFn: async () => {
-      const { data } = await axios.get(`/room-service/orders/${orderId}/status`);
-      return data.data as OrderStatusResponse;
+      const response = await axios.get(`/room-service/orders/${orderId}/status`);
+      return response.data.data as OrderStatusResponse;
     },
     enabled: !!orderId,
     refetchInterval: 15000, // Refresh every 15 seconds for real-time tracking
@@ -94,8 +94,8 @@ export const useGetServiceRequests = (guestId: number) => {
   return useQuery({
     queryKey: tabletKeys.services(guestId),
     queryFn: async () => {
-      const { data } = await axios.get(`/services/guest/${guestId}`);
-      return data.data as ServiceRequest[];
+      const response = await axios.get(`/services/guest/${guestId}`);
+      return response.data.data as ServiceRequest[];
     },
     enabled: !!guestId,
   });
@@ -106,8 +106,8 @@ export const useGetHotelInfo = () => {
   return useQuery({
     queryKey: tabletKeys.hotelInfo(),
     queryFn: async () => {
-      const { data } = await axios.get('/hotel/info');
-      return data.data as HotelInfo;
+      const response = await axios.get('/hotel/info');
+      return response.data.data as HotelInfo;
     },
   });
 };
@@ -118,8 +118,8 @@ export const usePlaceOrder = () => {
 
   return useMutation({
     mutationFn: async (orderData: PlaceOrderRequest) => {
-      const { data } = await axios.post('/room-service/orders', orderData);
-      return data.data;
+      const response = await axios.post('/room-service/orders', orderData);
+      return response.data.data;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ 
@@ -135,8 +135,8 @@ export const useRequestHousekeeping = () => {
 
   return useMutation({
     mutationFn: async (requestData: HousekeepingRequest) => {
-      const { data } = await axios.post('/services/housekeeping', requestData);
-      return data.data;
+      const response = await axios.post('/services/housekeeping', requestData);
+      return response.data.data;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ 
@@ -152,8 +152,8 @@ export const useRequestMaintenance = () => {
 
   return useMutation({
     mutationFn: async (requestData: MaintenanceRequest) => {
-      const { data } = await axios.post('/services/maintenance', requestData);
-      return data.data;
+      const response = await axios.post('/services/maintenance', requestData);
+      return response.data.data;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ 
@@ -167,11 +167,11 @@ export const useRequestMaintenance = () => {
 export const useExpressCheckout = (reservationId: number) => {
   return useMutation({
     mutationFn: async (checkoutData: ExpressCheckoutRequest) => {
-      const { data } = await axios.post(
+      const response = await axios.post(
         `/reservations/${reservationId}/checkout/express`,
         checkoutData
       );
-      return data.data as ExpressCheckoutResponse;
+      return response.data.data as ExpressCheckoutResponse;
     },
   });
 };

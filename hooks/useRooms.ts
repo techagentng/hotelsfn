@@ -37,6 +37,14 @@ export interface CreateRoomData {
   description: string;
 }
 
+export interface RoomSummaryStats {
+  total_rooms: number;
+  available: number;
+  occupied: number;
+  maintenance: number;
+  cleaning: number;
+}
+
 // Query Keys
 export const roomKeys = {
   all: ['rooms'] as const,
@@ -45,6 +53,7 @@ export const roomKeys = {
   details: () => [...roomKeys.all, 'detail'] as const,
   detail: (id: number) => [...roomKeys.details(), id] as const,
   available: (params: GetAvailableRoomsParams) => [...roomKeys.all, 'available', params] as const,
+  summary: () => [...roomKeys.all, 'summary'] as const,
 };
 
 // Queries
@@ -77,6 +86,16 @@ export const useGetAvailableRooms = (params: GetAvailableRoomsParams) => {
       return data.data;
     },
     enabled: !!params.check_in && !!params.check_out,
+  });
+};
+
+export const useGetRoomSummary = () => {
+  return useQuery({
+    queryKey: roomKeys.summary(),
+    queryFn: async () => {
+      const { data } = await axios.get('/rooms/summary');
+      return data.data as RoomSummaryStats;
+    },
   });
 };
 

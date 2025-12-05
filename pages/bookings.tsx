@@ -2,11 +2,23 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 import { Search, Filter, X, Calendar, User, Home, Clock, CheckCircle, XCircle } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
+import { useGetReservations, useUpdateReservationStatus, useCancelReservation } from '../hooks/useReservations';
+import { toast } from 'react-hot-toast';
+
+// Consistent date formatting to avoid hydration errors
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
 
 type BookingStatus = 'confirmed' | 'pending' | 'cancelled' | 'checked-in' | 'checked-out';
 
 interface Booking {
   id: string;
+  reservationId?: number;
   guestName: string;
   guestEmail: string;
   room: string;
@@ -79,8 +91,38 @@ export default function Bookings() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
-  const [pageIndex, setPageIndex] = useState(0);
+  const [pageIndex, setPageIndex] = useState(1);
   const itemsPerPage = 10;
+
+  // Fetch reservations from backend
+  const { data: reservationsData, isLoading } = useGetReservations({
+    page: pageIndex,
+    page_size: itemsPerPage,
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+  });
+
+  // Mutation hooks
+  const updateStatus = useUpdateReservationStatus();
+  const cancelReservation = useCancelReservation();
+
+  // Extract reservations from API response
+  const apiReservations = reservationsData?.data?.data || [];
+  
+  // Map API data to Booking interface (keep reservation ID for mutations)
+  const bookings: Booking[] = apiReservations.map((res: any) => ({
+    id: res.confirmation_number || `BK-${res.id}`,
+    reservationId: res.id, // Keep the numeric ID for API calls
+    guestName: res.guest_name || 'Unknown Guest',
+    guestEmail: res.guest_email || '',
+    room: res.room_number || 'N/A',
+    roomType: res.room_type || 'Standard',
+    checkIn: res.check_in_date,
+    checkOut: res.check_out_date,
+    status: res.status as BookingStatus,
+    total: res.total_amount || 0,
+    guestCount: res.number_of_guests || 1,
+    specialRequests: res.special_requests || '',
+  }));
 
   const calculateNights = (checkIn: string, checkOut: string) => {
     return Math.ceil(
@@ -88,7 +130,7 @@ export default function Bookings() {
     );
   };
 
-  const filteredBookings = mockBookings.filter(booking => {
+  const filteredBookings = bookings.filter(booking => {
     const matchesSearch = 
       booking.guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.guestEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -104,11 +146,10 @@ export default function Bookings() {
     return matchesSearch && matchesStatus && matchesDateRange;
   });
 
-  const pageCount = Math.ceil(filteredBookings.length / itemsPerPage);
-  const paginatedBookings = filteredBookings.slice(
-    pageIndex * itemsPerPage,
-    (pageIndex + 1) * itemsPerPage
-  );
+  // Use backend pagination
+  const meta = reservationsData?.data?.meta;
+  const pageCount = meta?.total_pages || 1;
+  const paginatedBookings = filteredBookings;
 
   const handleViewDetails = (booking: Booking) => {
     setSelectedBooking(booking);
@@ -122,7 +163,41 @@ export default function Bookings() {
     setSearchTerm('');
     setStatusFilter('all');
     setDateRange({ start: '', end: '' });
-    setPageIndex(0);
+    setPageIndex(1);
+  };
+
+  const handleConfirmBooking = async () => {
+    if (!selectedBooking?.reservationId) return;
+    
+    try {
+      await updateStatus.mutateAsync({
+        id: selectedBooking.reservationId,
+        status: 'confirmed'
+      });
+      toast.success('Booking confirmed successfully');
+      closeModal();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to confirm booking');
+    }
+  };
+
+  const handleRejectBooking = async () => {
+    if (!selectedBooking?.reservationId) return;
+    
+    const reason = prompt('Enter cancellation reason:');
+    if (!reason) return;
+    
+    try {
+      await cancelReservation.mutateAsync({
+        id: selectedBooking.reservationId,
+        cancellation_reason: reason,
+        refund_amount: 0
+      });
+      toast.success('Booking cancelled successfully');
+      closeModal();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to cancel booking');
+    }
   };
 
   return (
@@ -267,7 +342,7 @@ export default function Bookings() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
-                            {new Date(booking.checkIn).toLocaleDateString()} - {new Date(booking.checkOut).toLocaleDateString()}
+                            {formatDate(booking.checkIn)} - {formatDate(booking.checkOut)}
                           </div>
                           <div className="text-sm text-gray-500">
                             {calculateNights(booking.checkIn, booking.checkOut)} nights
@@ -307,14 +382,14 @@ export default function Bookings() {
             <div className="flex flex-col items-center justify-center px-4 py-4 bg-white border-t">
               <div className="flex gap-2">
                 <button
-                  onClick={() => setPageIndex(prev => Math.max(0, prev - 1))}
-                  disabled={pageIndex === 0}
+                  onClick={() => setPageIndex(prev => Math.max(1, prev - 1))}
+                  disabled={pageIndex === 1}
                   className="w-10 h-10 rounded-full border text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-40"
                 >
                   &lt;
                 </button>
 
-                {Array.from({ length: pageCount }, (_, i) => i).map(page => (
+                {Array.from({ length: pageCount }, (_, i) => i + 1).map(page => (
                   <button
                     key={page}
                     onClick={() => setPageIndex(page)}
@@ -324,20 +399,20 @@ export default function Bookings() {
                         : 'hover:bg-gray-100 text-gray-700'
                     }`}
                   >
-                    {page + 1}
+                    {page}
                   </button>
                 ))}
 
                 <button
-                  onClick={() => setPageIndex(prev => Math.min(pageCount - 1, prev + 1))}
-                  disabled={pageIndex === pageCount - 1}
+                  onClick={() => setPageIndex(prev => Math.min(pageCount, prev + 1))}
+                  disabled={pageIndex === pageCount}
                   className="w-10 h-10 rounded-full border text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-40"
                 >
                   &gt;
                 </button>
               </div>
               <p className="text-sm text-gray-600 mt-2">
-                Page {pageIndex + 1} of {pageCount}
+                Page {pageIndex} of {pageCount}
               </p>
             </div>
           </div>
@@ -422,17 +497,31 @@ export default function Bookings() {
               <div className="mt-8 flex justify-end space-x-3">
                 <button
                   type="button"
-                  className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                   onClick={closeModal}
+                  className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
                 >
-                  Reject
+                  Close
                 </button>
-                <button
-                  type="button"
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                >
-                  Confirm
-                </button>
+                {selectedBooking.status === 'pending' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleRejectBooking}
+                      disabled={cancelReservation.isPending}
+                      className="px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50 disabled:opacity-50"
+                    >
+                      {cancelReservation.isPending ? 'Cancelling...' : 'Reject'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmBooking}
+                      disabled={updateStatus.isPending}
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {updateStatus.isPending ? 'Confirming...' : 'Confirm'}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>

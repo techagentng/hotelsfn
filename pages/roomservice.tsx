@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
+import { toast } from 'react-hot-toast';
 import {
   Search,
   Filter,
@@ -20,26 +21,25 @@ import {
   ChevronRight,
   Calendar,
   MessageSquare,
+  UserPlus,
+  UserCheck,
+  UserX,
 } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
+import {
+  useGetServiceRequests,
+  useUpdateServiceRequest,
+  type ServiceRequest as APIServiceRequest,
+} from '../hooks/useRoomService';
+import {
+  useGetAvailableStaff,
+  useManualAssignStaff,
+  useAutoAssignStaff,
+  type Staff,
+} from '../hooks/useStaff';
 
 type ServiceType = 'room-service' | 'housekeeping' | 'maintenance' | 'special-requests' | 'transportation' | 'general-assistance';
 type ServiceStatus = 'pending' | 'in-progress' | 'completed' | 'cancelled';
-
-interface ServiceRequest {
-  id: string;
-  roomNumber: string;
-  guestName: string;
-  guestPhone: string;
-  serviceType: ServiceType;
-  status: ServiceStatus;
-  priority: 'low' | 'medium' | 'high';
-  description: string;
-  requestedAt: string;
-  assignedTo?: string;
-  completedAt?: string;
-  notes?: string;
-}
 
 const serviceTypeConfig: Record<ServiceType, { icon: React.ReactNode; label: string; color: string; bgColor: string }> = {
   'room-service': {
@@ -94,128 +94,76 @@ const statusIcons: Record<ServiceStatus, React.ReactNode> = {
   cancelled: <AlertCircle className="w-4 h-4 mr-1" />,
 };
 
-const mockServiceRequests: ServiceRequest[] = [
-  {
-    id: 'SR-001',
-    roomNumber: '101',
-    guestName: 'John Doe',
-    guestPhone: '+1 234 567 8900',
-    serviceType: 'room-service',
-    status: 'pending',
-    priority: 'high',
-    description: 'Order: 2x Caesar Salad, 1x Grilled Salmon, 1x Bottle of Red Wine',
-    requestedAt: '2024-12-05T10:30:00',
-    notes: 'Guest prefers no croutons on salad',
-  },
-  {
-    id: 'SR-002',
-    roomNumber: '102',
-    guestName: 'Jane Smith',
-    guestPhone: '+1 234 567 8901',
-    serviceType: 'housekeeping',
-    status: 'in-progress',
-    priority: 'medium',
-    description: 'Request: Fresh towels, clean bed sheets, vacuum room',
-    requestedAt: '2024-12-05T09:15:00',
-    assignedTo: 'Maria Garcia',
-  },
-  {
-    id: 'SR-003',
-    roomNumber: '103',
-    guestName: 'Robert Johnson',
-    guestPhone: '+1 234 567 8902',
-    serviceType: 'maintenance',
-    status: 'pending',
-    priority: 'high',
-    description: 'Issue: Air conditioning not working, room temperature too warm',
-    requestedAt: '2024-12-05T10:45:00',
-    notes: 'Guest reports temperature is 28°C',
-  },
-  {
-    id: 'SR-004',
-    roomNumber: '201',
-    guestName: 'Sarah Williams',
-    guestPhone: '+1 234 567 8903',
-    serviceType: 'special-requests',
-    status: 'completed',
-    priority: 'low',
-    description: 'Request: Extra pillows (2), extra blanket',
-    requestedAt: '2024-12-05T08:00:00',
-    completedAt: '2024-12-05T08:30:00',
-    assignedTo: 'John Smith',
-  },
-  {
-    id: 'SR-005',
-    roomNumber: '202',
-    guestName: 'Michael Brown',
-    guestPhone: '+1 234 567 8904',
-    serviceType: 'transportation',
-    status: 'pending',
-    priority: 'high',
-    description: 'Request: Airport pickup tomorrow at 6:00 AM, destination: Downtown Hotel',
-    requestedAt: '2024-12-05T11:00:00',
-    notes: 'Guest has 2 large suitcases',
-  },
-  {
-    id: 'SR-006',
-    roomNumber: '203',
-    guestName: 'Emily Davis',
-    guestPhone: '+1 234 567 8905',
-    serviceType: 'general-assistance',
-    status: 'in-progress',
-    priority: 'medium',
-    description: 'Request: WiFi password reset, help connecting to hotel network',
-    requestedAt: '2024-12-05T10:20:00',
-    assignedTo: 'Support Team',
-  },
-  {
-    id: 'SR-007',
-    roomNumber: '301',
-    guestName: 'David Wilson',
-    guestPhone: '+1 234 567 8906',
-    serviceType: 'room-service',
-    status: 'completed',
-    priority: 'medium',
-    description: 'Order: 1x Breakfast set, 1x Coffee, 1x Orange juice',
-    requestedAt: '2024-12-05T07:00:00',
-    completedAt: '2024-12-05T07:45:00',
-    assignedTo: 'Room Service Team',
-  },
-  {
-    id: 'SR-008',
-    roomNumber: '302',
-    guestName: 'Lisa Anderson',
-    guestPhone: '+1 234 567 8907',
-    serviceType: 'maintenance',
-    status: 'in-progress',
-    priority: 'high',
-    description: 'Issue: Bathroom sink is leaking, water damage on floor',
-    requestedAt: '2024-12-05T10:50:00',
-    assignedTo: 'Maintenance Team',
-  },
-];
 
 export default function RoomService() {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [serviceTypeFilter, setServiceTypeFilter] = useState<ServiceType | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<ServiceStatus | 'all'>('all');
-  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<APIServiceRequest | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const itemsPerPage = 10;
 
-  const filteredRequests = mockServiceRequests.filter(request => {
+  // Fetch service requests from API
+  const { data: serviceRequests = [], isLoading } = useGetServiceRequests({
+    page: pageIndex + 1,
+    page_size: 100, // Fetch more for client-side filtering
+  });
+
+  // Fetch available staff
+  const { data: availableStaff = [] } = useGetAvailableStaff();
+
+  // Staff assignment mutations
+  const manualAssign = useManualAssignStaff();
+  const autoAssign = useAutoAssignStaff();
+  
+  // Track which requests have been auto-assigned to prevent duplicate assignments
+  const assignedRequestsRef = useRef<Set<number>>(new Set());
+
+  // Auto-assign staff to pending unassigned requests
+  useEffect(() => {
+    const pendingUnassigned = serviceRequests.filter(
+      request => request.status === 'pending' && !request.assigned_to && !assignedRequestsRef.current.has(request.id)
+    );
+
+    pendingUnassigned.forEach(async (request) => {
+      // Mark as being processed to prevent retries
+      assignedRequestsRef.current.add(request.id);
+      
+      try {
+        await autoAssign.mutateAsync(request.id);
+        toast.success(`Staff auto-assigned to ${serviceTypeConfig[request.service_type]?.label || 'service request'} for Room ${request.room_number}`);
+      } catch (error: any) {
+        console.error('Auto-assign failed for request', request.id, ':', error);
+        
+        // For 404 errors, keep it marked as processed to prevent infinite loop
+        // The endpoint doesn't exist, so retrying won't help
+        if (error.response?.status === 404) {
+          toast.error('Auto-assign endpoint not found. Please restart the backend server.', {
+            duration: 5000,
+            id: 'auto-assign-404', // Prevent duplicate toasts
+          });
+        } else {
+          // For other errors, remove from tracking so it can be retried
+          assignedRequestsRef.current.delete(request.id);
+          toast.error(error.response?.data?.error || 'Failed to auto-assign staff');
+        }
+      }
+    });
+  }, [serviceRequests, autoAssign]);
+
+  const filteredRequests = useMemo(() => serviceRequests.filter(request => {
     const matchesSearch =
-      request.roomNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      request.guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (request.room_number?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (request.guest_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       request.description.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesServiceType = serviceTypeFilter === 'all' || request.serviceType === serviceTypeFilter;
+    const matchesServiceType = serviceTypeFilter === 'all' || request.service_type === serviceTypeFilter;
     const matchesStatus = statusFilter === 'all' || request.status === statusFilter;
 
     return matchesSearch && matchesServiceType && matchesStatus;
-  });
+  }), [serviceRequests, searchTerm, serviceTypeFilter, statusFilter]);
 
   const pageCount = Math.ceil(filteredRequests.length / itemsPerPage);
   const paginatedRequests = filteredRequests.slice(
@@ -223,20 +171,20 @@ export default function RoomService() {
     (pageIndex + 1) * itemsPerPage
   );
 
-  const pendingCount = mockServiceRequests.filter(r => r.status === 'pending').length;
-  const inProgressCount = mockServiceRequests.filter(r => r.status === 'in-progress').length;
-  const completedCount = mockServiceRequests.filter(r => r.status === 'completed').length;
+  const pendingCount = useMemo(() => serviceRequests.filter(r => r.status === 'pending').length, [serviceRequests]);
+  const inProgressCount = useMemo(() => serviceRequests.filter(r => r.status === 'in-progress').length, [serviceRequests]);
+  const completedCount = useMemo(() => serviceRequests.filter(r => r.status === 'completed').length, [serviceRequests]);
 
-  const serviceTypeCounts = {
-    'room-service': mockServiceRequests.filter(r => r.serviceType === 'room-service').length,
-    housekeeping: mockServiceRequests.filter(r => r.serviceType === 'housekeeping').length,
-    maintenance: mockServiceRequests.filter(r => r.serviceType === 'maintenance').length,
-    'special-requests': mockServiceRequests.filter(r => r.serviceType === 'special-requests').length,
-    transportation: mockServiceRequests.filter(r => r.serviceType === 'transportation').length,
-    'general-assistance': mockServiceRequests.filter(r => r.serviceType === 'general-assistance').length,
-  };
+  const serviceTypeCounts = useMemo(() => ({
+    'room-service': serviceRequests.filter(r => r.service_type === 'room-service').length,
+    housekeeping: serviceRequests.filter(r => r.service_type === 'housekeeping').length,
+    maintenance: serviceRequests.filter(r => r.service_type === 'maintenance').length,
+    'special-requests': serviceRequests.filter(r => r.service_type === 'special-requests').length,
+    transportation: serviceRequests.filter(r => r.service_type === 'transportation').length,
+    'general-assistance': serviceRequests.filter(r => r.service_type === 'general-assistance').length,
+  }), [serviceRequests]);
 
-  const handleViewDetails = (request: ServiceRequest) => {
+  const handleViewDetails = (request: APIServiceRequest) => {
     setSelectedRequest(request);
   };
 
@@ -251,12 +199,32 @@ export default function RoomService() {
     setPageIndex(0);
   };
 
-  const handleAssignRequest = (request: ServiceRequest) => {
-    alert(`Assigning request ${request.id} to staff member`);
+  const updateRequest = useUpdateServiceRequest(selectedRequest?.id || 0);
+
+
+  const handleAssignRequest = async (request: APIServiceRequest, staffName: string) => {
+    try {
+      await updateRequest.mutateAsync({
+        status: 'in-progress',
+        assigned_to: staffName,
+      });
+      toast.success('Request assigned successfully');
+      setSelectedRequest(null);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to assign request');
+    }
   };
 
-  const handleCompleteRequest = (request: ServiceRequest) => {
-    alert(`Marking request ${request.id} as completed`);
+  const handleCompleteRequest = async (request: APIServiceRequest) => {
+    try {
+      await updateRequest.mutateAsync({
+        status: 'completed',
+      });
+      toast.success('Request marked as completed');
+      setSelectedRequest(null);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to complete request');
+    }
   };
 
   return (
@@ -395,9 +363,14 @@ export default function RoomService() {
 
           {/* Service Requests List */}
           <div className="space-y-3">
-            {paginatedRequests.length > 0 ? (
+            {isLoading ? (
+              <div className="text-center py-12 bg-white rounded-lg">
+                <Clock className="w-12 h-12 text-gray-300 mx-auto mb-4 animate-spin" />
+                <p className="text-gray-500">Loading service requests...</p>
+              </div>
+            ) : paginatedRequests.length > 0 ? (
               paginatedRequests.map((request) => {
-                const config = serviceTypeConfig[request.serviceType];
+                const config = serviceTypeConfig[request.service_type] || serviceTypeConfig['general-assistance'];
                 return (
                   <div
                     key={request.id}
@@ -411,7 +384,7 @@ export default function RoomService() {
                             <div className={config.color}>{config.icon}</div>
                           </div>
                           <div>
-                            <h3 className="text-lg font-semibold text-gray-900">Room {request.roomNumber}</h3>
+                            <h3 className="text-lg font-semibold text-gray-900">Room {request.room_number || 'N/A'}</h3>
                             <p className="text-sm text-gray-500">{config.label}</p>
                           </div>
                           <span className={`px-3 py-1 text-xs leading-5 font-semibold rounded-full ${statusStyles[request.status]}`}>
@@ -425,31 +398,44 @@ export default function RoomService() {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm text-gray-600">
                           <div className="flex items-center">
                             <User size={16} className="mr-2 text-gray-400" />
-                            <span>{request.guestName}</span>
+                            <span>{request.guest_name || 'N/A'}</span>
                           </div>
                           <div className="flex items-center">
                             <Phone size={16} className="mr-2 text-gray-400" />
-                            <span>{request.guestPhone}</span>
+                            <span>{request.guest_phone || 'N/A'}</span>
                           </div>
                           <div className="flex items-center">
                             <Calendar size={16} className="mr-2 text-gray-400" />
-                            <span>{new Date(request.requestedAt).toLocaleTimeString()}</span>
+                            <span>{new Date(request.requested_at).toLocaleTimeString()}</span>
                           </div>
-                          {request.assignedTo && (
-                            <div className="flex items-center">
-                              <CheckCircle size={16} className="mr-2 text-gray-400" />
-                              <span>{request.assignedTo}</span>
-                            </div>
-                          )}
+                          <div className="flex items-center">
+                            {request.assigned_to ? (
+                              <>
+                                <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mr-2">
+                                  <span className="text-xs font-semibold text-white">
+                                    {request.assigned_to.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                  </span>
+                                </div>
+                                <span className="font-medium text-green-600">{request.assigned_to}</span>
+                              </>
+                            ) : (
+                              <>
+                                <UserX size={16} className="mr-2 text-orange-400" />
+                                <span className="text-orange-500 font-medium">Unassigned</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => handleViewDetails(request)}
-                        className="ml-4 p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <ChevronRight size={20} className="text-gray-400" />
-                      </button>
+                      <div className="ml-4 flex flex-col gap-2">
+                        <button
+                          onClick={() => handleViewDetails(request)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <ChevronRight size={20} className="text-gray-400" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -512,7 +498,7 @@ export default function RoomService() {
               <div className="flex justify-between items-start mb-6">
                 <div>
                   <h2 className="text-2xl font-bold">Service Request #{selectedRequest.id}</h2>
-                  <p className="text-gray-500">Room {selectedRequest.roomNumber}</p>
+                  <p className="text-gray-500">Room {selectedRequest.room_number || 'N/A'}</p>
                 </div>
                 <button
                   onClick={closeModal}
@@ -528,20 +514,20 @@ export default function RoomService() {
                   <div className="space-y-4">
                     <div>
                       <p className="text-sm text-gray-500">Guest Name</p>
-                      <p className="font-medium">{selectedRequest.guestName}</p>
+                      <p className="font-medium">{selectedRequest.guest_name || 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Phone</p>
                       <p className="font-medium flex items-center">
                         <Phone size={16} className="mr-2 text-gray-400" />
-                        {selectedRequest.guestPhone}
+                        {selectedRequest.guest_phone || 'N/A'}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Room Number</p>
                       <p className="font-medium flex items-center">
                         <MapPin size={16} className="mr-2 text-gray-400" />
-                        {selectedRequest.roomNumber}
+                        {selectedRequest.room_number || 'N/A'}
                       </p>
                     </div>
                   </div>
@@ -553,12 +539,12 @@ export default function RoomService() {
                     <div>
                       <p className="text-sm text-gray-500">Service Type</p>
                       <div className="flex items-center mt-1">
-                        <div className={`p-2 rounded-lg ${serviceTypeConfig[selectedRequest.serviceType].bgColor} mr-2`}>
-                          <div className={serviceTypeConfig[selectedRequest.serviceType].color}>
-                            {serviceTypeConfig[selectedRequest.serviceType].icon}
+                        <div className={`p-2 rounded-lg ${(serviceTypeConfig[selectedRequest.service_type] || serviceTypeConfig['general-assistance']).bgColor} mr-2`}>
+                          <div className={(serviceTypeConfig[selectedRequest.service_type] || serviceTypeConfig['general-assistance']).color}>
+                            {(serviceTypeConfig[selectedRequest.service_type] || serviceTypeConfig['general-assistance']).icon}
                           </div>
                         </div>
-                        <p className="font-medium">{serviceTypeConfig[selectedRequest.serviceType].label}</p>
+                        <p className="font-medium">{(serviceTypeConfig[selectedRequest.service_type] || serviceTypeConfig['general-assistance']).label}</p>
                       </div>
                     </div>
                     <div>
@@ -591,18 +577,18 @@ export default function RoomService() {
               <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
                 <div>
                   <p className="text-gray-500">Requested At</p>
-                  <p className="font-medium">{new Date(selectedRequest.requestedAt).toLocaleString()}</p>
+                  <p className="font-medium">{new Date(selectedRequest.requested_at).toLocaleString()}</p>
                 </div>
-                {selectedRequest.completedAt && (
+                {selectedRequest.completed_at && (
                   <div>
                     <p className="text-gray-500">Completed At</p>
-                    <p className="font-medium">{new Date(selectedRequest.completedAt).toLocaleString()}</p>
+                    <p className="font-medium">{new Date(selectedRequest.completed_at).toLocaleString()}</p>
                   </div>
                 )}
-                {selectedRequest.assignedTo && (
+                {selectedRequest.assigned_to && (
                   <div>
                     <p className="text-gray-500">Assigned To</p>
-                    <p className="font-medium">{selectedRequest.assignedTo}</p>
+                    <p className="font-medium">{selectedRequest.assigned_to}</p>
                   </div>
                 )}
               </div>
@@ -618,19 +604,21 @@ export default function RoomService() {
                 {selectedRequest.status === 'pending' && (
                   <button
                     type="button"
-                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-                    onClick={() => handleAssignRequest(selectedRequest)}
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                    onClick={() => handleAssignRequest(selectedRequest, 'Staff Member')}
+                    disabled={updateRequest.isPending}
                   >
-                    Assign Staff
+                    {updateRequest.isPending ? 'Assigning...' : 'Assign Staff'}
                   </button>
                 )}
                 {selectedRequest.status === 'in-progress' && (
                   <button
                     type="button"
-                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
                     onClick={() => handleCompleteRequest(selectedRequest)}
+                    disabled={updateRequest.isPending}
                   >
-                    Mark Complete
+                    {updateRequest.isPending ? 'Completing...' : 'Mark Complete'}
                   </button>
                 )}
               </div>
@@ -638,6 +626,7 @@ export default function RoomService() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

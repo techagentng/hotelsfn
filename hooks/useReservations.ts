@@ -30,6 +30,19 @@ interface CreateReservationData {
   total_price: number;
 }
 
+export interface DashboardStats {
+  new_bookings_today: number;
+  scheduled_bookings: number;
+  check_ins_today: number;
+  check_outs_today: number;
+  pending_check_ins: number;
+  pending_check_outs: number;
+  total_rooms: number;
+  available_rooms_today: number;
+  occupied_rooms_today: number;
+  sold_out_rooms_today: number;
+}
+
 // Query Keys
 export const reservationKeys = {
   all: ['reservations'] as const,
@@ -39,6 +52,7 @@ export const reservationKeys = {
   detail: (id: number) => [...reservationKeys.details(), id] as const,
   byGuest: (guestId: number) => [...reservationKeys.all, 'guest', guestId] as const,
   byRoom: (roomId: number) => [...reservationKeys.all, 'room', roomId] as const,
+  dashboard: () => [...reservationKeys.all, 'dashboard'] as const,
 };
 
 // Queries
@@ -85,6 +99,16 @@ export const useGetReservationsByRoom = (roomId: number) => {
   });
 };
 
+export const useGetDashboardStats = () => {
+  return useQuery({
+    queryKey: reservationKeys.dashboard(),
+    queryFn: async () => {
+      const { data } = await axios.get('/reservations/dashboard');
+      return data.data as DashboardStats;
+    },
+  });
+};
+
 // Mutations
 export const useCreateReservation = () => {
   const queryClient = useQueryClient();
@@ -114,6 +138,65 @@ export const useUpdateReservation = (id: number) => {
       queryClient.invalidateQueries({ queryKey: reservationKeys.detail(id) });
       queryClient.invalidateQueries({ queryKey: reservationKeys.lists() });
       queryClient.invalidateQueries({ queryKey: reservationKeys.byGuest(updatedReservation.guest_id) });
+    },
+  });
+};
+
+export const useUpdateReservationStatus = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const { data } = await axios.put(`/reservations/${id}/status`, { status });
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: reservationKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: reservationKeys.dashboard() });
+    },
+  });
+};
+
+export const useCancelReservation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, cancellation_reason, refund_amount }: { 
+      id: number; 
+      cancellation_reason: string;
+      refund_amount?: number;
+    }) => {
+      const { data } = await axios.put(`/reservations/${id}/cancel`, { 
+        cancellation_reason,
+        refund_amount 
+      });
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: reservationKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: reservationKeys.dashboard() });
+    },
+  });
+};
+
+export const useCheckoutReservation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, additional_charges, notes }: { 
+      id: number; 
+      additional_charges?: number;
+      notes?: string;
+    }) => {
+      const { data } = await axios.post(`/reservations/${id}/checkout`, { 
+        additional_charges,
+        notes 
+      });
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: reservationKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: reservationKeys.dashboard() });
     },
   });
 };

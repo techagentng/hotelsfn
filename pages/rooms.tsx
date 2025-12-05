@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 import { Search, Filter, X, Plus, Wifi, Users, DollarSign, AlertCircle, CheckCircle, Home, Save, Bed } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
-import { useGetRooms, useCreateRoom, useUpdateRoom, useDeleteRoom, type Room as APIRoom, type CreateRoomData } from '../hooks/useRooms';
+import { useGetRooms, useGetRoomSummary, useCreateRoom, useUpdateRoom, useDeleteRoom, type Room as APIRoom, type CreateRoomData } from '../hooks/useRooms';
 import { toast } from 'react-hot-toast';
 
 type RoomStatus = 'available' | 'occupied' | 'maintenance' | 'cleaning';
@@ -47,6 +47,9 @@ export default function Rooms() {
     page_size: itemsPerPage,
     status: statusFilter !== 'all' ? statusFilter : undefined,
   });
+
+  // Fetch room summary stats
+  const { data: summaryStats } = useGetRoomSummary();
 
   const createRoom = useCreateRoom();
   const updateRoom = useUpdateRoom(editingRoom?.id || 0);
@@ -94,10 +97,13 @@ export default function Rooms() {
   };
 
   const roomTypes = ['Standard', 'Deluxe', 'Suite'];
-  const availableCount = rooms.filter((r: APIRoom) => r.status === 'available').length;
-  const occupiedCount = rooms.filter((r: APIRoom) => r.status === 'occupied').length;
-  const maintenanceCount = rooms.filter((r: APIRoom) => r.status === 'maintenance').length;
-  const totalRooms = meta?.total || rooms.length;
+  
+  // Use backend summary stats if available, otherwise fallback to client-side calculation
+  const totalRooms = summaryStats?.total_rooms || meta?.total || rooms.length;
+  const availableCount = summaryStats?.available || rooms.filter((r: APIRoom) => r.status === 'available').length;
+  const occupiedCount = summaryStats?.occupied || rooms.filter((r: APIRoom) => r.status === 'occupied').length;
+  const maintenanceCount = summaryStats?.maintenance || rooms.filter((r: APIRoom) => r.status === 'maintenance').length;
+  const cleaningCount = summaryStats?.cleaning || rooms.filter((r: APIRoom) => r.status === 'cleaning').length;
 
   return (
     <div className="flex min-h-screen bg-gray-100 text-gray-900 font-sans">

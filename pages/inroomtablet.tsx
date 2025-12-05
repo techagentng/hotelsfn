@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { formatTime } from '../utils/dateFormat';
 import { toast } from 'react-hot-toast';
+import { useCheckoutReservation } from '../hooks/useReservations';
 import {
   useGetGuestInfo,
   useGetMenu,
@@ -33,7 +34,7 @@ import {
   type MenuItem,
   type MenuCategory,
 } from '../hooks/useTablet';
-import type { CartItem, HousekeepingServiceType, MaintenanceIssueType } from '../types/tablet';
+import type { CartItem, HousekeepingServiceType, MaintenanceIssueType } from '@/types/tablet';
 
 // For demo purposes - in production, this would come from device/session
 const ROOM_NUMBER = '104';
@@ -56,6 +57,11 @@ export default function InRoomTablet() {
   const [maintenanceType, setMaintenanceType] = useState<MaintenanceIssueType>('air_conditioning');
   const [maintenanceDesc, setMaintenanceDesc] = useState('');
 
+  // Checkout states
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [additionalCharges, setAdditionalCharges] = useState('');
+  const [checkoutNotes, setCheckoutNotes] = useState('');
+
   // Fetch data
   const { data: guestInfo, isLoading: loadingGuest } = useGetGuestInfo(ROOM_NUMBER);
   const { data: categories } = useGetMenuCategories();
@@ -67,6 +73,7 @@ export default function InRoomTablet() {
 
   // Mutations
   const placeOrder = usePlaceOrder();
+  const checkoutMutation = useCheckoutReservation();
   const requestHousekeeping = useRequestHousekeeping();
   const requestMaintenance = useRequestMaintenance();
 
@@ -151,6 +158,27 @@ export default function InRoomTablet() {
     }
   };
 
+  const handleCheckout = async () => {
+    if (!guestInfo?.reservation?.id) return;
+
+    try {
+      await checkoutMutation.mutateAsync({
+        id: guestInfo.reservation.id,
+        additional_charges: additionalCharges ? parseFloat(additionalCharges) : undefined,
+        notes: checkoutNotes || undefined,
+      });
+
+      toast.success('Check-out successful! Thank you for staying with us.');
+      setShowCheckoutModal(false);
+      // Redirect to thank you page or home
+      setTimeout(() => {
+        router.push('/');
+      }, 2000);
+    } catch (error: any) {
+      toast.error(error.response?.data?.errors || 'Failed to check out');
+    }
+  };
+
   const handleHousekeepingRequest = async () => {
     if (!guestInfo) return;
 
@@ -194,6 +222,85 @@ export default function InRoomTablet() {
     }
   };
 
+  // Checkout Modal Component
+  const CheckoutModal = () => {
+    if (!showCheckoutModal) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-8 z-50">
+        <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl">
+          <div className="p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-gray-900">Checkout</h2>
+              <button
+                onClick={() => setShowCheckoutModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-8 h-8" />
+              </button>
+            </div>
+
+            <div className="mb-6 p-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl">
+              <h3 className="font-bold text-lg mb-3 text-gray-900">Reservation Summary</h3>
+              <div className="space-y-2 text-gray-700">
+                <p><span className="font-medium">Guest:</span> {guestInfo?.guest.first_name} {guestInfo?.guest.last_name}</p>
+                <p><span className="font-medium">Room:</span> {guestInfo?.room.room_number} - {guestInfo?.room.room_type}</p>
+                <p><span className="font-medium">Check-in:</span> {guestInfo?.reservation?.check_in_date}</p>
+                <p><span className="font-medium">Check-out:</span> {guestInfo?.reservation?.check_out_date}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Additional Charges (Optional)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={additionalCharges}
+                  onChange={(e) => setAdditionalCharges(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                />
+                <p className="text-xs text-gray-500 mt-1">Mini bar, room service, or other charges</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Notes (Optional)
+                </label>
+                <textarea
+                  value={checkoutNotes}
+                  onChange={(e) => setCheckoutNotes(e.target.value)}
+                  placeholder="Any feedback or special notes..."
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <button
+                onClick={() => setShowCheckoutModal(false)}
+                className="flex-1 px-6 py-4 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCheckout}
+                disabled={checkoutMutation.isPending}
+                className="flex-1 px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {checkoutMutation.isPending ? 'Processing...' : 'Confirm Checkout'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loadingGuest) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
@@ -208,7 +315,7 @@ export default function InRoomTablet() {
         <div className="bg-white rounded-xl p-8 text-center">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">Room Not Found</h2>
-          <p className="text-gray-600">Unable to load guest information</p>
+          <p className="text-gray-900">Unable to load guest information</p>
         </div>
       </div>
     );
@@ -217,53 +324,66 @@ export default function InRoomTablet() {
   // Home Page
   if (currentPage === 'home') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600 p-8">
-        <div className="max-w-4xl mx-auto">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 p-8">
+        <div className="max-w-5xl mx-auto">
           {/* Header */}
-          <div className="text-white mb-12">
-            <h1 className="text-5xl font-bold mb-2">
-              Welcome, {guestInfo.guest.first_name}!
-            </h1>
-            <p className="text-2xl opacity-90">
-              Room {guestInfo.room.room_number} • {guestInfo.room.room_type}
-            </p>
+          <div className="text-white mb-16">
+            <div className="backdrop-blur-sm bg-white/10 rounded-3xl p-8 border border-white/20 flex items-center justify-between gap-6">
+              <div className="flex-1 pointer-events-none">
+                <h1 className="text-6xl font-extrabold mb-3 bg-gradient-to-r from-white to-purple-100 bg-clip-text text-transparent">
+                  Welcome, {guestInfo.guest.first_name}!
+                </h1>
+                <p className="text-2xl font-medium text-white/90">
+                  Room {guestInfo.room.room_number} • {guestInfo.room.room_type}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCheckoutModal(true)}
+                className="bg-white text-indigo-600 px-8 py-4 rounded-2xl font-bold text-lg hover:bg-gray-50 transition-all hover:scale-105 shadow-xl hover:shadow-2xl flex items-center gap-3 flex-shrink-0 z-50 relative pointer-events-auto cursor-pointer"
+              >
+                <span>Checkout</span>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-2 gap-6 mb-8">
+          <div className="grid grid-cols-2 gap-8 mb-10">
             <button
               onClick={() => setCurrentPage('menu')}
-              className="bg-white rounded-2xl p-8 text-left hover:shadow-2xl transition-shadow"
+              className="group bg-white/95 backdrop-blur-lg rounded-3xl p-10 text-left hover:bg-white hover:scale-105 transition-all duration-300 shadow-xl hover:shadow-2xl border border-orange-100"
             >
-              <div className="bg-orange-100 w-16 h-16 rounded-xl flex items-center justify-center mb-4">
-                <UtensilsCrossed className="w-8 h-8 text-orange-600" />
+              <div className="bg-gradient-to-br from-orange-400 to-orange-600 w-20 h-20 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                <UtensilsCrossed className="w-10 h-10 text-white" />
               </div>
-              <h3 className="text-2xl font-bold mb-2">Order Food</h3>
-              <p className="text-gray-900">Browse our delicious menu</p>
+              <h3 className="text-3xl font-bold mb-3 text-gray-900 group-hover:text-orange-600 transition-colors">Order Food</h3>
+              <p className="text-gray-600 text-lg">Browse our delicious menu</p>
             </button>
 
             <button
               onClick={() => setCurrentPage('services')}
-              className="bg-white rounded-2xl p-8 text-left hover:shadow-2xl transition-shadow"
+              className="group bg-white/95 backdrop-blur-lg rounded-3xl p-10 text-left hover:bg-white hover:scale-105 transition-all duration-300 shadow-xl hover:shadow-2xl border border-blue-100"
             >
-              <div className="bg-blue-100 w-16 h-16 rounded-xl flex items-center justify-center mb-4">
-                <Sparkles className="w-8 h-8 text-blue-600" />
+              <div className="bg-gradient-to-br from-blue-400 to-blue-600 w-20 h-20 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                <Sparkles className="w-10 h-10 text-white" />
               </div>
-              <h3 className="text-2xl font-bold mb-2">Request Service</h3>
-              <p className="text-gray-900">Housekeeping & Maintenance</p>
+              <h3 className="text-3xl font-bold mb-3 text-gray-900 group-hover:text-blue-600 transition-colors">Request Service</h3>
+              <p className="text-gray-600 text-lg">Housekeeping & Maintenance</p>
             </button>
 
             <button
               onClick={() => setCurrentPage('orders')}
-              className="bg-white rounded-2xl p-8 text-left hover:shadow-2xl transition-shadow"
+              className="group bg-white/95 backdrop-blur-lg rounded-3xl p-10 text-left hover:bg-white hover:scale-105 transition-all duration-300 shadow-xl hover:shadow-2xl border border-green-100 relative overflow-hidden"
             >
-              <div className="bg-green-100 w-16 h-16 rounded-xl flex items-center justify-center mb-4">
-                <Clock className="w-8 h-8 text-green-600" />
+              <div className="bg-gradient-to-br from-green-400 to-green-600 w-20 h-20 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                <Clock className="w-10 h-10 text-white" />
               </div>
-              <h3 className="text-2xl font-bold mb-2">Track Orders</h3>
-              <p className="text-gray-900">View your active orders</p>
+              <h3 className="text-3xl font-bold mb-3 text-gray-900 group-hover:text-green-600 transition-colors">Track Orders</h3>
+              <p className="text-gray-600 text-lg">View your active orders</p>
               {activeOrders && activeOrders.length > 0 && (
-                <span className="inline-block mt-2 bg-green-500 text-white px-3 py-1 rounded-full text-sm">
+                <span className="inline-flex items-center mt-4 bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-lg animate-pulse">
                   {activeOrders.length} active
                 </span>
               )}
@@ -271,29 +391,29 @@ export default function InRoomTablet() {
 
             <button
               onClick={() => setCurrentPage('info')}
-              className="bg-white rounded-2xl p-8 text-left hover:shadow-2xl transition-shadow"
+              className="group bg-white/95 backdrop-blur-lg rounded-3xl p-10 text-left hover:bg-white hover:scale-105 transition-all duration-300 shadow-xl hover:shadow-2xl border border-purple-100"
             >
-              <div className="bg-purple-100 w-16 h-16 rounded-xl flex items-center justify-center mb-4">
-                <Info className="w-8 h-8 text-purple-600" />
+              <div className="bg-gradient-to-br from-purple-400 to-purple-600 w-20 h-20 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                <Info className="w-10 h-10 text-white" />
               </div>
-              <h3 className="text-2xl font-bold mb-2">Hotel Info</h3>
-              <p className="text-gray-900">Facilities & Contact</p>
+              <h3 className="text-3xl font-bold mb-3 text-gray-900 group-hover:text-purple-600 transition-colors">Hotel Info</h3>
+              <p className="text-gray-600 text-lg">Facilities & Contact</p>
             </button>
           </div>
 
           {/* Active Orders Preview */}
           {activeOrders && activeOrders.length > 0 && (
-            <div className="bg-white rounded-2xl p-6">
-              <h2 className="text-xl font-bold mb-4">Your Active Orders</h2>
-              <div className="space-y-3">
+            <div className="bg-white/95 backdrop-blur-lg rounded-3xl p-8 shadow-xl border border-gray-100">
+              <h2 className="text-2xl font-bold mb-6 text-gray-900">Your Active Orders</h2>
+              <div className="space-y-4">
                 {activeOrders.map((order: any) => (
-                  <div key={order.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div key={order.id} className="flex items-center justify-between p-6 bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl hover:shadow-md transition-shadow">
                     <div>
-                      <p className="font-medium">{order.order_number}</p>
+                      <p className="font-bold text-lg text-gray-900">{order.order_number}</p>
                       <p className="text-sm text-gray-600">{order.items?.length || 0} items</p>
                     </div>
                     <div className="text-right">
-                      <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                      <span className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full text-sm font-semibold shadow-md">
                         {order.status}
                       </span>
                     </div>
@@ -303,6 +423,9 @@ export default function InRoomTablet() {
             </div>
           )}
         </div>
+        
+        {/* Checkout Modal */}
+        {CheckoutModal()}
       </div>
     );
   }
@@ -310,36 +433,39 @@ export default function InRoomTablet() {
   // Menu Page
   if (currentPage === 'menu') {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         {/* Header */}
-        <div className="bg-white border-b sticky top-0 z-20">
+        <div className="bg-white/95 backdrop-blur-lg border-b border-gray-200 sticky top-0 z-20 shadow-sm">
           <div className="flex items-center justify-between p-6">
             <button
               onClick={() => setCurrentPage('home')}
-              className="text-gray-600 hover:text-gray-900"
+              className="flex items-center gap-2 text-gray-700 hover:text-indigo-600 font-medium transition-colors"
             >
-              ← Back
+              <span className="text-xl">←</span> Back
             </button>
-            <h1 className="text-2xl font-bold">Room Service Menu</h1>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Room Service Menu</h1>
             {cart.length > 0 && (
               <button
                 onClick={() => setShowCart(true)}
-                className="relative bg-indigo-600 text-white px-4 py-2 rounded-lg"
+                className="relative bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
               >
                 <ShoppingCart className="w-5 h-5 inline mr-2" />
-                {cartItemsCount}
+                <span className="font-semibold">{cartItemsCount}</span>
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
+                  {cart.length}
+                </span>
               </button>
             )}
           </div>
 
           {/* Category Tabs */}
-          <div className="flex overflow-x-auto px-6 pb-4">
+          <div className="flex overflow-x-auto px-6 pb-4 gap-3">
             <button
               onClick={() => setSelectedCategory('all')}
-              className={`px-6 py-2 rounded-lg mr-2 whitespace-nowrap ${
+              className={`px-6 py-3 rounded-xl font-semibold whitespace-nowrap transition-all ${
                 selectedCategory === 'all'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-700'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg scale-105'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
               }`}
             >
               All Items
@@ -348,10 +474,10 @@ export default function InRoomTablet() {
               <button
                 key={category.name}
                 onClick={() => setSelectedCategory(category.name)}
-                className={`px-6 py-2 rounded-lg mr-2 whitespace-nowrap ${
+                className={`px-6 py-3 rounded-xl font-semibold whitespace-nowrap transition-all ${
                   selectedCategory === category.name
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-700'
+                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg scale-105'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
                 }`}
               >
                 {category.name} ({category.items_count})
@@ -369,34 +495,37 @@ export default function InRoomTablet() {
           ) : (
             <div className="grid grid-cols-2 gap-6">
               {menuItems?.map((item) => (
-                <div key={item.id} className="bg-white rounded-xl overflow-hidden shadow-sm">
+                <div key={item.id} className="group bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 border border-gray-100">
                   {item.image_url && (
-                    <img
-                      src={item.image_url}
-                      alt={item.name}
-                      className="w-full h-48 object-cover"
-                    />
+                    <div className="relative overflow-hidden">
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
+                        className="w-full h-52 object-cover group-hover:scale-110 transition-transform duration-500"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+                    </div>
                   )}
-                  <div className="p-4">
-                    <h3 className="text-lg font-bold mb-1">{item.name}</h3>
-                    <p className="text-sm text-gray-900 mb-3">{item.description}</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xl font-bold text-indigo-600">
+                  <div className="p-6">
+                    <h3 className="text-xl font-bold mb-2 text-gray-900 group-hover:text-indigo-600 transition-colors">{item.name}</h3>
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                         ${item.price.toFixed(2)}
                       </span>
                       <button
                         onClick={() => addToCart(item)}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
+                        className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-2.5 rounded-xl hover:shadow-lg transition-all hover:scale-105 font-semibold"
                       >
                         <Plus className="w-4 h-4 inline mr-1" />
                         Add
                       </button>
                     </div>
                     {item.preparation_time && (
-                      <p className="text-xs text-gray-500 mt-2">
-                        <Clock className="w-3 h-3 inline mr-1" />
-                        {item.preparation_time} min
-                      </p>
+                      <div className="flex items-center gap-1 text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg w-fit">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>{item.preparation_time} min</span>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -418,14 +547,14 @@ export default function InRoomTablet() {
                 </div>
 
                 {cart.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">Your cart is empty</p>
+                  <p className="text-center text-gray-700 py-8">Your cart is empty</p>
                 ) : (
                   <>
                     <div className="space-y-4 mb-6">
                       {cart.map((item) => (
                         <div key={item.menu_item.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                           <div className="flex-1">
-                            <h3 className="font-medium">{item.menu_item.name}</h3>
+                            <h3 className="font-medium text-gray-900">{item.menu_item.name}</h3>
                             <p className="text-sm text-gray-900">${item.menu_item.price.toFixed(2)} each</p>
                           </div>
                           <div className="flex items-center space-x-3">
@@ -454,11 +583,11 @@ export default function InRoomTablet() {
                     </div>
 
                     <div className="mb-4">
-                      <label className="block text-sm font-medium mb-2">Special Requests (Optional)</label>
+                      <label className="block text-sm font-medium text-gray-900 mb-2">Special Requests (Optional)</label>
                       <textarea
                         value={specialRequests}
                         onChange={(e) => setSpecialRequests(e.target.value)}
-                        className="w-full px-4 py-2 border rounded-lg"
+                        className="w-full px-4 py-2 border rounded-lg text-gray-900"
                         rows={3}
                         placeholder="Any special instructions..."
                       />
@@ -496,7 +625,7 @@ export default function InRoomTablet() {
           <div className="flex items-center justify-between">
             <button
               onClick={() => setCurrentPage('home')}
-              className="text-gray-600 hover:text-gray-900"
+              className="text-gray-900 hover:text-indigo-600"
             >
               ← Back
             </button>
@@ -509,7 +638,7 @@ export default function InRoomTablet() {
           {!activeOrders || activeOrders.length === 0 ? (
             <div className="text-center py-12">
               <Clock className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No active orders</p>
+              <p className="text-gray-700">No active orders</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -517,7 +646,7 @@ export default function InRoomTablet() {
                 <div key={order.id} className="bg-white rounded-xl p-6 shadow-sm">
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 className="text-lg font-bold">{order.order_number}</h3>
+                      <h3 className="text-lg font-bold text-gray-900">{order.order_number}</h3>
                       <p className="text-sm text-gray-900">Ordered at {formatTime(order.ordered_at)}</p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-sm font-medium ${
@@ -539,7 +668,7 @@ export default function InRoomTablet() {
                             order.status === status ? 'bg-indigo-600 text-white' :
                             index < ['pending', 'preparing', 'ready', 'delivering', 'delivered'].indexOf(order.status)
                               ? 'bg-green-500 text-white'
-                              : 'bg-gray-200 text-gray-400'
+                              : 'bg-gray-200 text-gray-600'
                           }`}>
                             {index < ['pending', 'preparing', 'ready', 'delivering', 'delivered'].indexOf(order.status) ? (
                               <CheckCircle className="w-5 h-5" />
@@ -591,7 +720,7 @@ export default function InRoomTablet() {
           <div className="flex items-center justify-between">
             <button
               onClick={() => setCurrentPage('home')}
-              className="text-gray-600 hover:text-gray-900"
+              className="text-gray-900 hover:text-indigo-600"
             >
               ← Back
             </button>
@@ -609,7 +738,7 @@ export default function InRoomTablet() {
               <div className="bg-blue-100 w-12 h-12 rounded-lg flex items-center justify-center mb-3">
                 <Sparkles className="w-6 h-6 text-blue-600" />
               </div>
-              <h3 className="text-lg font-bold mb-1">Housekeeping</h3>
+              <h3 className="text-lg font-bold mb-1 text-gray-900">Housekeeping</h3>
               <p className="text-sm text-gray-900">Request cleaning or amenities</p>
             </button>
 
@@ -620,7 +749,7 @@ export default function InRoomTablet() {
               <div className="bg-red-100 w-12 h-12 rounded-lg flex items-center justify-center mb-3">
                 <Wrench className="w-6 h-6 text-red-600" />
               </div>
-              <h3 className="text-lg font-bold mb-1">Maintenance</h3>
+              <h3 className="text-lg font-bold mb-1 text-gray-900">Maintenance</h3>
               <p className="text-sm text-gray-900">Report an issue</p>
             </button>
           </div>
@@ -635,9 +764,9 @@ export default function InRoomTablet() {
                     <div className="flex justify-between items-start">
                       <div>
                         <p className="font-medium">{request.request_number}</p>
-                        <p className="text-sm text-gray-600 capitalize">{request.type}</p>
+                        <p className="text-sm text-gray-900 capitalize">{request.type}</p>
                         {request.description && (
-                          <p className="text-sm text-gray-500 mt-1">{request.description}</p>
+                          <p className="text-sm text-gray-700 mt-1">{request.description}</p>
                         )}
                       </div>
                       <span className={`px-2 py-1 rounded-full text-xs ${
@@ -659,14 +788,14 @@ export default function InRoomTablet() {
         {showHousekeepingForm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-xl p-6 max-w-md w-full">
-              <h3 className="text-xl font-bold mb-4">Request Housekeeping</h3>
+              <h3 className="text-xl font-bold mb-4 text-gray-900">Request Housekeeping</h3>
               
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Service Type</label>
+                <label className="block text-sm font-medium text-gray-900 mb-2">Service Type</label>
                 <select
                   value={housekeepingType}
                   onChange={(e) => setHousekeepingType(e.target.value as HousekeepingServiceType)}
-                  className="w-full px-4 py-2 border rounded-lg"
+                  className="w-full px-4 py-2 border rounded-lg text-gray-900"
                 >
                   <option value="cleaning">Room Cleaning</option>
                   <option value="towels">Fresh Towels</option>
@@ -677,11 +806,11 @@ export default function InRoomTablet() {
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Notes (Optional)</label>
+                <label className="block text-sm font-medium text-gray-900 mb-2">Notes (Optional)</label>
                 <textarea
                   value={housekeepingNotes}
                   onChange={(e) => setHousekeepingNotes(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg"
+                  className="w-full px-4 py-2 border rounded-lg text-gray-900"
                   rows={3}
                   placeholder="Any special instructions..."
                 />
@@ -690,7 +819,7 @@ export default function InRoomTablet() {
               <div className="flex space-x-2">
                 <button
                   onClick={() => setShowHousekeepingForm(false)}
-                  className="flex-1 px-4 py-2 border rounded-lg"
+                  className="flex-1 px-4 py-2 border rounded-lg text-gray-900"
                 >
                   Cancel
                 </button>
@@ -710,14 +839,14 @@ export default function InRoomTablet() {
         {showMaintenanceForm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-xl p-6 max-w-md w-full">
-              <h3 className="text-xl font-bold mb-4">Report Maintenance Issue</h3>
+              <h3 className="text-xl font-bold mb-4 text-gray-900">Report Maintenance Issue</h3>
               
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Issue Type</label>
+                <label className="block text-sm font-medium text-gray-900 mb-2">Issue Type</label>
                 <select
                   value={maintenanceType}
                   onChange={(e) => setMaintenanceType(e.target.value as MaintenanceIssueType)}
-                  className="w-full px-4 py-2 border rounded-lg"
+                  className="w-full px-4 py-2 border rounded-lg text-gray-900"
                 >
                   <option value="air_conditioning">Air Conditioning</option>
                   <option value="plumbing">Plumbing</option>
@@ -729,11 +858,11 @@ export default function InRoomTablet() {
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Description</label>
+                <label className="block text-sm font-medium text-gray-900 mb-2">Description</label>
                 <textarea
                   value={maintenanceDesc}
                   onChange={(e) => setMaintenanceDesc(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg"
+                  className="w-full px-4 py-2 border rounded-lg text-gray-900"
                   rows={3}
                   placeholder="Please describe the issue..."
                   required
@@ -743,7 +872,7 @@ export default function InRoomTablet() {
               <div className="flex space-x-2">
                 <button
                   onClick={() => setShowMaintenanceForm(false)}
-                  className="flex-1 px-4 py-2 border rounded-lg"
+                  className="flex-1 px-4 py-2 border rounded-lg text-gray-900"
                 >
                   Cancel
                 </button>
@@ -770,11 +899,11 @@ export default function InRoomTablet() {
           <div className="flex items-center justify-between">
             <button
               onClick={() => setCurrentPage('home')}
-              className="text-gray-600 hover:text-gray-900"
+              className="text-gray-900 hover:text-indigo-600"
             >
               ← Back
             </button>
-            <h1 className="text-2xl font-bold">Hotel Information</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Hotel Information</h1>
             <div className="w-20"></div>
           </div>
         </div>
@@ -784,23 +913,23 @@ export default function InRoomTablet() {
             <h2 className="text-xl font-bold mb-4">Contact Information</h2>
             <div className="space-y-3">
               <div className="flex items-center">
-                <HomeIcon className="w-5 h-5 text-gray-400 mr-3" />
+                <HomeIcon className="w-5 h-5 text-gray-600 mr-3" />
                 <div>
-                  <p className="text-sm text-gray-600">Reception</p>
+                  <p className="text-sm text-gray-900">Reception</p>
                   <p className="font-medium">Dial 0</p>
                 </div>
               </div>
               <div className="flex items-center">
-                <UtensilsCrossed className="w-5 h-5 text-gray-400 mr-3" />
+                <UtensilsCrossed className="w-5 h-5 text-gray-600 mr-3" />
                 <div>
-                  <p className="text-sm text-gray-600">Room Service</p>
+                  <p className="text-sm text-gray-900">Room Service</p>
                   <p className="font-medium">Dial 1</p>
                 </div>
               </div>
               <div className="flex items-center">
-                <AlertCircle className="w-5 h-5 text-gray-400 mr-3" />
+                <AlertCircle className="w-5 h-5 text-gray-600 mr-3" />
                 <div>
-                  <p className="text-sm text-gray-600">Emergency</p>
+                  <p className="text-sm text-gray-900">Emergency</p>
                   <p className="font-medium">Dial 911</p>
                 </div>
               </div>
@@ -810,9 +939,9 @@ export default function InRoomTablet() {
           <div className="bg-white rounded-xl p-6">
             <h2 className="text-xl font-bold mb-4">WiFi Information</h2>
             <div className="bg-indigo-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600 mb-1">Network</p>
+              <p className="text-sm text-gray-900 mb-1">Network</p>
               <p className="font-bold text-lg mb-3">GrandHotel-Guest</p>
-              <p className="text-sm text-gray-600 mb-1">Password</p>
+              <p className="text-sm text-gray-900 mb-1">Password</p>
               <p className="font-mono font-bold text-lg">welcome2024</p>
             </div>
           </div>

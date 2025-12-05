@@ -4,6 +4,7 @@ import { useRouter } from "next/router";
 import { LayoutDashboard, Bed, Calendar, Settings, LogOut } from "lucide-react";
 import dynamic from 'next/dynamic';
 import Sidebar from "../components/Sidebar";
+import { useGetDashboardStats } from "../hooks/useReservations";
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
@@ -13,6 +14,9 @@ export default function Dashboard() {
   const router = useRouter();
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Fetch dashboard stats
+  const { data: dashboardStats } = useGetDashboardStats();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -75,16 +79,40 @@ export default function Dashboard() {
 
         {/* Top Cards */}
         <section className="grid grid-cols-4 gap-6 mb-10">
-          <StatCard title="New Booking" value="450" percent="65" />
-          <StatCard title="Scheduled Room" value="258" percent="47" />
-          <StatCard title="Check In" value="97" green />
-          <StatCard title="Check Out" value="97" red />
+          <StatCard 
+            title="New Booking Today" 
+            value={dashboardStats?.new_bookings_today?.toString() || "0"} 
+            percent="65" 
+          />
+          <StatCard 
+            title="Scheduled Bookings" 
+            value={dashboardStats?.scheduled_bookings?.toString() || "0"} 
+            percent="47" 
+          />
+          <StatCard 
+            title="Check In Today" 
+            value={dashboardStats?.check_ins_today?.toString() || "0"} 
+            green 
+          />
+          <StatCard 
+            title="Check Out Today" 
+            value={dashboardStats?.check_outs_today?.toString() || "0"} 
+            red 
+          />
         </section>
 
         {/* Available Rooms */}
         <section className="grid grid-cols-2 gap-6 mb-10">
-          <RoomBar title="Available Rooms Today" value={345} max={500} />
-          <RoomBar title="Sold Out Rooms Today" value={150} max={500} />
+          <RoomBar 
+            title="Available Rooms Today" 
+            value={dashboardStats?.available_rooms_today || 0} 
+            max={dashboardStats?.total_rooms || 500} 
+          />
+          <RoomBar 
+            title="Sold Out Rooms Today" 
+            value={dashboardStats?.sold_out_rooms_today || 0} 
+            max={dashboardStats?.total_rooms || 500} 
+          />
         </section>
 
         {/* Reservation Statistics Chart */}

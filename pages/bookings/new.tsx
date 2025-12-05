@@ -165,30 +165,36 @@ export default function NewBooking() {
     setError(null);
     
     try {
-      const response = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+      // Use axios to call the backend API
+      const response = await axios.post('/reservations', {
+        guest_id: parseInt(formData.guestId),
+        room_id: parseInt(formData.roomId),
+        check_in_date: formData.checkIn,
+        check_out_date: formData.checkOut,
+        number_of_guests: formData.guestCount,
+        special_requests: formData.specialRequests || undefined,
+        payment_method: 'credit_card', // Default payment method
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create booking');
-      }
       
       // Redirect to bookings list with success message
       router.push({
         pathname: '/bookings',
         query: { success: 'Booking created successfully' },
       });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error creating booking');
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Error creating booking');
       console.error('Booking error:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const calculateTotalPrice = () => {
+    const checkInDate = new Date(formData.checkIn);
+    const checkOutDate = new Date(formData.checkOut);
+    const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+    const roomType = roomTypes.find(rt => rt.id === formData.roomType);
+    return nights * (roomType?.price || 0);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -566,7 +572,7 @@ export default function NewBooking() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm font-medium text-gray-500">Nights</p>
-                        <p className="text-lg font-semibold">
+                        <p className="text-lg font-semibold text-gray-900">
                           {formData.checkIn && formData.checkOut
                             ? Math.ceil(
                                 (new Date(formData.checkOut).getTime() - new Date(formData.checkIn).getTime()) /
@@ -577,7 +583,7 @@ export default function NewBooking() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-medium text-gray-500">Total</p>
-                        <p className="text-lg font-semibold">${total.toFixed(2)}</p>
+                        <p className="text-lg font-semibold text-gray-900">${total.toFixed(2)}</p>
                       </div>
                     </div>
                   </div>
