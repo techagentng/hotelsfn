@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { ArrowLeft, Save, Calendar as CalendarIcon, User, Users, Home, X, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, Calendar as CalendarIcon, User, Users, Home, X, Loader2, Search } from 'lucide-react';
 import Sidebar from '../../components/Sidebar';
+import { useGetGuests } from '../../hooks/useGuests';
+import axios from '../../lib/axios';
 
 const roomTypes = [
   { id: 'standard', name: 'Standard', price: 100 },
@@ -27,9 +29,12 @@ export default function NewBooking() {
   tomorrow.setDate(tomorrow.getDate() + 1);
 
   const [formData, setFormData] = useState({
+    guestId: '',
     guestName: '',
     guestEmail: '',
     guestPhone: '',
+    guestIdType: 'Passport',
+    guestIdNumber: '',
     roomType: '',
     roomId: '',
     checkIn: getDateString(new Date()),
@@ -38,7 +43,53 @@ export default function NewBooking() {
     specialRequests: '',
   });
 
+  const [guestSearch, setGuestSearch] = useState('');
+  const [showGuestDropdown, setShowGuestDropdown] = useState(false);
+  const { data: guestsData } = useGetGuests({ search: guestSearch, page_size: 10 });
+
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Handle guest selection
+  const handleGuestSelect = (guest: any) => {
+    setFormData(prev => ({
+      ...prev,
+      guestId: guest.id.toString(),
+      guestName: guest.name,
+      guestEmail: guest.email,
+      guestPhone: guest.phone || '',
+      guestIdType: guest.id_type || 'Passport',
+      guestIdNumber: guest.id_number || '',
+    }));
+    setGuestSearch(guest.name);
+    setShowGuestDropdown(false);
+  };
+
+  // Clear guest selection
+  const handleClearGuest = () => {
+    setFormData(prev => ({
+      ...prev,
+      guestId: '',
+      guestName: '',
+      guestEmail: '',
+      guestPhone: '',
+      guestIdType: 'Passport',
+      guestIdNumber: '',
+    }));
+    setGuestSearch('');
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('#guestSearch') && !target.closest('.guest-dropdown')) {
+        setShowGuestDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Check room availability when dates or room type changes
   useEffect(() => {
@@ -46,31 +97,32 @@ export default function NewBooking() {
       if (!formData.roomType || !formData.checkIn || !formData.checkOut) return;
       
       setCheckingAvailability(true);
+      setError(null);
       try {
-        const response = await fetch('/api/rooms/availability', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            roomType: formData.roomType,
-            checkIn: formData.checkIn,
-            checkOut: formData.checkOut,
-          }),
+        // Call backend API directly
+        const { data } = await axios.post('/rooms/availability', {
+          room_type: formData.roomType,
+          check_in_date: formData.checkIn,
+          check_out_date: formData.checkOut,
         });
         
-        if (!response.ok) throw new Error('Failed to check availability');
+        // Transform backend response
+        const rooms = (data.data || []).map((room: any) => ({
+          id: room.id.toString(),
+          number: room.room_number,
+          type: room.room_type,
+        }));
         
-        const data = await response.json();
-        setAvailableRooms(data.availableRooms || []);
+        setAvailableRooms(rooms);
         
         // Auto-select first available room if none selected
-        if (data.availableRooms?.length > 0 && !formData.roomId) {
-          setFormData(prev => ({ ...prev, roomId: data.availableRooms[0].id }));
+        if (rooms.length > 0 && !formData.roomId) {
+          setFormData(prev => ({ ...prev, roomId: rooms[0].id }));
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error checking availability:', err);
-        setError('Failed to check room availability');
+        setError(err.response?.data?.error || 'Failed to check room availability');
+        setAvailableRooms([]);
       } finally {
         setCheckingAvailability(false);
       }
@@ -209,6 +261,66 @@ export default function NewBooking() {
                   Guest Information
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Guest Selection */}
+                  <div className="md:col-span-2">
+                    <label htmlFor="guestSearch" className="block text-sm font-medium text-gray-700 mb-1">
+                      Select Existing Guest (Optional)
+                    </label>
+                    <div className="relative">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <input
+                          type="text"
+                          id="guestSearch"
+                          placeholder="Search by name or email..."
+                          value={guestSearch}
+                          onChange={(e) => {
+                            setGuestSearch(e.target.value);
+                            setShowGuestDropdown(true);
+                          }}
+                          onFocus={() => setShowGuestDropdown(true)}
+                          className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder-gray-400"
+                        />
+                        {formData.guestId && (
+                          <button
+                            type="button"
+                            onClick={handleClearGuest}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            <X className="h-5 w-5" />
+                          </button>
+                        )}
+                      </div>
+                      
+                      {/* Guest Dropdown */}
+                      {showGuestDropdown && guestSearch && guestsData?.data && guestsData.data.length > 0 && (
+                        <div className="guest-dropdown absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+                          {guestsData.data.map((guest: any) => (
+                            <button
+                              key={guest.id}
+                              type="button"
+                              onClick={() => handleGuestSelect(guest)}
+                              className="w-full px-4 py-3 text-left hover:bg-indigo-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                            >
+                              <div className="font-medium text-gray-900">{guest.name}</div>
+                              <div className="text-sm text-gray-500">{guest.email}</div>
+                              {guest.phone && (
+                                <div className="text-sm text-gray-400">{guest.phone}</div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {formData.guestId && (
+                      <p className="mt-1 text-sm text-green-600 flex items-center">
+                        <User className="h-4 w-4 mr-1" />
+                        Guest selected (ID: {formData.guestId})
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Guest Name */}
                   <div>
                     <label htmlFor="guestName" className="block text-sm font-medium text-gray-700 mb-1">
                       Full Name <span className="text-red-500">*</span>
@@ -220,9 +332,12 @@ export default function NewBooking() {
                       required
                       value={formData.guestName}
                       onChange={handleInputChange}
+                      disabled={!!formData.guestId}
                       className={`w-full px-4 py-2 border ${
                         formErrors.guestName ? 'border-red-300' : 'border-gray-300'
-                      } rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+                      } rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 ${
+                        formData.guestId ? 'bg-gray-50 cursor-not-allowed text-gray-600' : ''
+                      }`}
                     />
                     {formErrors.guestName && (
                       <p className="mt-1 text-sm text-red-600">{formErrors.guestName}</p>
@@ -239,9 +354,12 @@ export default function NewBooking() {
                       required
                       value={formData.guestEmail}
                       onChange={handleInputChange}
+                      disabled={!!formData.guestId}
                       className={`w-full px-4 py-2 border ${
                         formErrors.guestEmail ? 'border-red-300' : 'border-gray-300'
-                      } rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+                      } rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 ${
+                        formData.guestId ? 'bg-gray-50 cursor-not-allowed text-gray-600' : ''
+                      }`}
                     />
                     {formErrors.guestEmail && (
                       <p className="mt-1 text-sm text-red-600">{formErrors.guestEmail}</p>
@@ -257,9 +375,56 @@ export default function NewBooking() {
                       name="guestPhone"
                       value={formData.guestPhone}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      disabled={!!formData.guestId}
+                      className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 ${
+                        formData.guestId ? 'bg-gray-50 cursor-not-allowed text-gray-600' : ''
+                      }`}
                     />
                   </div>
+
+                  {/* ID Type */}
+                  <div>
+                    <label htmlFor="guestIdType" className="block text-sm font-medium text-gray-700 mb-1">
+                      ID Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      id="guestIdType"
+                      name="guestIdType"
+                      required
+                      value={formData.guestIdType}
+                      onChange={handleInputChange}
+                      disabled={!!formData.guestId}
+                      className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 ${
+                        formData.guestId ? 'bg-gray-50 cursor-not-allowed text-gray-600' : ''
+                      }`}
+                    >
+                      <option value="Passport">Passport</option>
+                      <option value="Driver's License">Driver's License</option>
+                      <option value="National ID">National ID</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  {/* ID Number */}
+                  <div>
+                    <label htmlFor="guestIdNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                      ID Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="guestIdNumber"
+                      name="guestIdNumber"
+                      required
+                      value={formData.guestIdNumber}
+                      onChange={handleInputChange}
+                      disabled={!!formData.guestId}
+                      className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 ${
+                        formData.guestId ? 'bg-gray-50 cursor-not-allowed text-gray-600' : ''
+                      }`}
+                      placeholder="Enter ID number"
+                    />
+                  </div>
+
                   <div>
                     <label htmlFor="guestCount" className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
                       <Users className="mr-1 h-4 w-4" />
@@ -274,7 +439,7 @@ export default function NewBooking() {
                       required
                       value={formData.guestCount}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
                     />
                   </div>
                 </div>
@@ -299,7 +464,7 @@ export default function NewBooking() {
                       onChange={handleInputChange}
                       className={`w-full px-4 py-2 border ${
                         formErrors.roomType ? 'border-red-300' : 'border-gray-300'
-                      } rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+                      } rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900`}
                     >
                       <option value="">Select a room type</option>
                       {roomTypes.map((type) => (
@@ -332,7 +497,7 @@ export default function NewBooking() {
                           onChange={handleInputChange}
                           className={`w-full px-4 py-2 border ${
                             formErrors.roomId ? 'border-red-300' : 'border-gray-300'
-                          } rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+                          } rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900`}
                         >
                           <option value="">Select a room</option>
                           {availableRooms.map((room) => (
@@ -368,7 +533,7 @@ export default function NewBooking() {
                         onChange={handleInputChange}
                         className={`w-full px-4 py-2 border ${
                           formErrors.checkIn ? 'border-red-300' : 'border-gray-300'
-                        } rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+                        } rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900`}
                       />
                       {formErrors.checkIn && (
                         <p className="mt-1 text-sm text-red-600">{formErrors.checkIn}</p>
@@ -389,7 +554,7 @@ export default function NewBooking() {
                         onChange={handleInputChange}
                         className={`w-full px-4 py-2 border ${
                           formErrors.checkOut ? 'border-red-300' : 'border-gray-300'
-                        } rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+                        } rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900`}
                       />
                       {formErrors.checkOut && (
                         <p className="mt-1 text-sm text-red-600">{formErrors.checkOut}</p>
@@ -429,7 +594,7 @@ export default function NewBooking() {
                   rows={3}
                   value={formData.specialRequests}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder-gray-400"
                   placeholder="Any special requests or additional information..."
                 />
               </div>

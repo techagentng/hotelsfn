@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { LayoutDashboard, Bed, Calendar, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Bed, Calendar, Settings, LogOut, Sparkles, LogIn, UtensilsCrossed, Users } from 'lucide-react';
 import { useRouter } from 'next/router';
 
 const MenuItem = ({ 
@@ -53,6 +53,26 @@ export default function Sidebar() {
             icon={<Calendar size={20} />} 
             label="Bookings" 
             href="/bookings"
+          />
+          <MenuItem 
+            icon={<LogIn size={20} />} 
+            label="Check-In" 
+            href="/checkin"
+          />
+          <MenuItem 
+            icon={<UtensilsCrossed size={20} />} 
+            label="Room Service" 
+            href="/roomservice"
+          />
+          <MenuItem 
+            icon={<Sparkles size={20} />} 
+            label="Housekeeping" 
+            href="/housekeeping"
+          />
+          <MenuItem 
+            icon={<Users size={20} />} 
+            label="Guest History" 
+            href="/guesthistory"
           />
           <MenuItem 
             icon={<Settings size={20} />} 

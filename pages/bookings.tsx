@@ -79,6 +79,8 @@ export default function Bookings() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [pageIndex, setPageIndex] = useState(0);
+  const itemsPerPage = 10;
 
   const calculateNights = (checkIn: string, checkOut: string) => {
     return Math.ceil(
@@ -102,6 +104,12 @@ export default function Bookings() {
     return matchesSearch && matchesStatus && matchesDateRange;
   });
 
+  const pageCount = Math.ceil(filteredBookings.length / itemsPerPage);
+  const paginatedBookings = filteredBookings.slice(
+    pageIndex * itemsPerPage,
+    (pageIndex + 1) * itemsPerPage
+  );
+
   const handleViewDetails = (booking: Booking) => {
     setSelectedBooking(booking);
   };
@@ -114,6 +122,7 @@ export default function Bookings() {
     setSearchTerm('');
     setStatusFilter('all');
     setDateRange({ start: '', end: '' });
+    setPageIndex(0);
   };
 
   return (
@@ -235,8 +244,8 @@ export default function Bookings() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredBookings.length > 0 ? (
-                    filteredBookings.map((booking) => (
+                  {paginatedBookings.length > 0 ? (
+                    paginatedBookings.map((booking) => (
                       <tr key={booking.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {booking.id}
@@ -276,12 +285,9 @@ export default function Bookings() {
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <button
                             onClick={() => handleViewDetails(booking)}
-                            className="text-indigo-600 hover:text-indigo-900 mr-4"
+                            className="text-indigo-600 hover:text-indigo-900"
                           >
                             View
-                          </button>
-                          <button className="text-gray-600 hover:text-gray-900">
-                            Edit
                           </button>
                         </td>
                       </tr>
@@ -295,6 +301,44 @@ export default function Bookings() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Pagination */}
+            <div className="flex flex-col items-center justify-center px-4 py-4 bg-white border-t">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPageIndex(prev => Math.max(0, prev - 1))}
+                  disabled={pageIndex === 0}
+                  className="w-10 h-10 rounded-full border text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-40"
+                >
+                  &lt;
+                </button>
+
+                {Array.from({ length: pageCount }, (_, i) => i).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setPageIndex(page)}
+                    className={`w-10 h-10 rounded-full text-sm ${
+                      page === pageIndex
+                        ? 'bg-gray-200 text-black'
+                        : 'hover:bg-gray-100 text-gray-700'
+                    }`}
+                  >
+                    {page + 1}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => setPageIndex(prev => Math.min(pageCount - 1, prev + 1))}
+                  disabled={pageIndex === pageCount - 1}
+                  className="w-10 h-10 rounded-full border text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-40"
+                >
+                  &gt;
+                </button>
+              </div>
+              <p className="text-sm text-gray-600 mt-2">
+                Page {pageIndex + 1} of {pageCount}
+              </p>
             </div>
           </div>
         </div>
@@ -381,13 +425,13 @@ export default function Bookings() {
                   className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                   onClick={closeModal}
                 >
-                  Close
+                  Reject
                 </button>
                 <button
                   type="button"
                   className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
-                  Print Invoice
+                  Confirm
                 </button>
               </div>
             </div>
