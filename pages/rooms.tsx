@@ -299,7 +299,7 @@ export default function Rooms() {
                       </div>
                       <div className="flex items-center text-gray-600">
                         <DollarSign size={16} className="mr-2 text-gray-400" />
-                        <span className="text-sm">${room.price_per_night}/night</span>
+                        <span className="text-sm">₦{room.price_per_night}/night</span>
                       </div>
                       <div className="flex items-center text-gray-600">
                         <Bed size={16} className="mr-2 text-gray-400" />
@@ -407,7 +407,7 @@ export default function Rooms() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Price per Night</p>
-                      <p className="font-medium text-indigo-600">${selectedRoom.price_per_night}</p>
+                      <p className="font-medium text-indigo-600">₦{selectedRoom.price_per_night}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Bed Type</p>

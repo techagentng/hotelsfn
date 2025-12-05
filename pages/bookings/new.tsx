@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { ArrowLeft, Save, Calendar as CalendarIcon, User, Users, Home, X, Loader2, Search, Upload, FileText, Eye } from 'lucide-react';
+import { ArrowLeft, Save, Calendar as CalendarIcon, User, Users, Home, X, Loader2, Search, Upload, FileText, Eye, Camera } from 'lucide-react';
 import Sidebar from '../../components/Sidebar';
 import { useGetGuests } from '../../hooks/useGuests';
 import axios from '../../lib/axios';
+import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { incrementScore } from '../../store';
 
 const roomTypes = [
   { id: 'standard', name: 'Standard', price: 100 },
@@ -13,6 +15,9 @@ const roomTypes = [
 
 export default function NewBooking() {
   const router = useRouter();
+  const dispatch = useAppDispatch();
+  const scoreCount = useAppSelector((state) => state.score.count);
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [availableRooms, setAvailableRooms] = useState<Array<{ id: string; number: string; type: string }>>([]);
@@ -48,6 +53,20 @@ export default function NewBooking() {
   const [idDocumentPreview, setIdDocumentPreview] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationComplete, setVerificationComplete] = useState(false);
+  
+  // Facial verification state
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [facialPhoto, setFacialPhoto] = useState<string | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  
+  // Face match state for special files
+  const [isFakeUploading, setIsFakeUploading] = useState(false);
+  const [fakeUploadProgress, setFakeUploadProgress] = useState(0);
+  const [showFaceMatchScore, setShowFaceMatchScore] = useState(false);
+  const [isFlaggedFile, setIsFlaggedFile] = useState(false); // _obs files
+  const [isVerifiedFile, setIsVerifiedFile] = useState(false); // _cta files
+  const [faceMatchScore, setFaceMatchScore] = useState(0);
+  const [isMatchingFace, setIsMatchingFace] = useState(false);
 
   const [guestSearch, setGuestSearch] = useState('');
   const [showGuestDropdown, setShowGuestDropdown] = useState(false);
@@ -76,6 +95,33 @@ export default function NewBooking() {
     setIdDocument(file);
     setError(null);
     setVerificationComplete(false);
+
+    // Check if filename ends with _obs or _cta
+    const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, ''); // Remove extension
+    const isObsFile = fileNameWithoutExt.endsWith('_obs');
+    const isCtaFile = fileNameWithoutExt.endsWith('_cta');
+    console.log('Uploaded file:', file.name);
+    console.log('Ends with _obs?', isObsFile, 'Ends with _cta?', isCtaFile);
+    
+    // Reset states
+    setIsFlaggedFile(false);
+    setIsVerifiedFile(false);
+    setShowFaceMatchScore(false);
+    setFaceMatchScore(0);
+    
+    if (isObsFile) {
+      // _obs files: fake upload, 15% face match
+      dispatch(incrementScore(file.name));
+      setIsFlaggedFile(true);
+      console.log('🚨 Flagged file detected! Incrementing score...');
+      
+      // Start fake upload simulation (don't actually upload)
+      simulateFakeUpload();
+    } else if (isCtaFile) {
+      // _cta files: real upload, 100% face match
+      setIsVerifiedFile(true);
+      console.log('✅ Verified file detected (_cta)');
+    }
 
     // Create preview for images
     if (file.type.startsWith('image/')) {
@@ -106,13 +152,136 @@ export default function NewBooking() {
     }, 3000);
   };
 
+  // Simulate fake upload for _obs files
+  const simulateFakeUpload = () => {
+    setIsFakeUploading(true);
+    setFakeUploadProgress(0);
+    setShowFaceMatchScore(false);
+    
+    // Simulate upload progress
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += Math.random() * 15 + 5;
+      if (progress >= 100) {
+        progress = 100;
+        clearInterval(interval);
+        setFakeUploadProgress(100);
+        setIsFakeUploading(false);
+        
+        // Show face match score after "upload" completes (only if facial photo exists)
+        if (facialPhoto) {
+          simulateFaceMatching(15); // 15% for _obs files
+        }
+      } else {
+        setFakeUploadProgress(Math.min(progress, 99));
+      }
+    }, 200);
+  };
+
+  // Simulate face matching process with timeout
+  const simulateFaceMatching = (targetScore: number) => {
+    setIsMatchingFace(true);
+    setShowFaceMatchScore(false);
+    setFaceMatchScore(0);
+    
+    // Simulate face matching (2 seconds)
+    setTimeout(() => {
+      setIsMatchingFace(false);
+      setFaceMatchScore(targetScore);
+      setShowFaceMatchScore(true);
+    }, 2000);
+  };
+
   // Remove uploaded document
   const handleRemoveDocument = () => {
     setIdDocument(null);
     setIdDocumentPreview(null);
     setIsVerifying(false);
     setVerificationComplete(false);
+    setIsFlaggedFile(false);
+    setIsVerifiedFile(false);
+    setShowFaceMatchScore(false);
+    setFakeUploadProgress(0);
+    setFaceMatchScore(0);
+    setIsMatchingFace(false);
   };
+
+  // Handle facial verification camera
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'user', width: 640, height: 480 } 
+      });
+      setStream(mediaStream);
+      setIsCameraActive(true);
+      
+      // Set video element source after a small delay to ensure element is rendered
+      setTimeout(() => {
+        const videoElement = document.getElementById('cameraVideo') as HTMLVideoElement;
+        if (videoElement) {
+          videoElement.srcObject = mediaStream;
+          videoElement.play().catch(err => console.error('Error playing video:', err));
+        }
+      }, 100);
+    } catch (err) {
+      console.error('Error accessing camera:', err);
+      setError('Unable to access camera. Please check permissions.');
+    }
+  };
+
+  const capturePhoto = () => {
+    const videoElement = document.getElementById('cameraVideo') as HTMLVideoElement;
+    if (!videoElement) {
+      console.error('Video element not found');
+      return;
+    }
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = videoElement.videoWidth || 640;
+    canvas.height = videoElement.videoHeight || 480;
+    
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+      const photoData = canvas.toDataURL('image/jpeg', 0.9);
+      console.log('Photo captured, data length:', photoData.length);
+      setFacialPhoto(photoData);
+      stopCamera();
+      
+      // Trigger face matching based on file type
+      if (isFlaggedFile && idDocument) {
+        // _obs file: 15% match score
+        simulateFaceMatching(15);
+      } else if (isVerifiedFile && idDocument) {
+        // _cta file: 100% match score
+        simulateFaceMatching(100);
+      }
+    } else {
+      console.error('Could not get canvas context');
+    }
+  };
+
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+    setIsCameraActive(false);
+  };
+
+  const removeFacialPhoto = () => {
+    setFacialPhoto(null);
+    setShowFaceMatchScore(false);
+  };
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [stream]);
 
   // Handle guest selection
   const handleGuestSelect = (guest: any) => {
@@ -528,15 +697,17 @@ export default function NewBooking() {
                     />
                   </div>
 
-                  {/* ID Document Upload */}
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      <FileText className="inline mr-1 h-4 w-4" />
-                      Upload ID Document (Optional)
-                    </label>
-                    <p className="text-xs text-gray-500 mb-2">
-                      Upload a copy of the guest's ID (Passport, Driver's License, etc.)
-                    </p>
+                  {/* ID Document Upload & Facial Verification - Side by Side */}
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* ID Document Upload */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <FileText className="inline mr-1 h-4 w-4" />
+                        Upload ID Document
+                      </label>
+                      <p className="text-xs text-gray-500 mb-2">
+                        Upload a copy of the guest's ID
+                      </p>
                     
                     {!idDocument ? (
                       <div className="relative">
@@ -557,7 +728,7 @@ export default function NewBooking() {
                           </span>
                         </label>
                         <p className="text-xs text-gray-500 mt-1">
-                          Supported formats: JPEG, PNG, WebP, PDF (Max 5MB)
+                          JPEG, PNG, WebP, PDF (Max 5MB)
                         </p>
                       </div>
                     ) : (
@@ -624,6 +795,123 @@ export default function NewBooking() {
                         </div>
                       </div>
                     )}
+                    </div>
+
+                    {/* Facial Verification */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <Camera className="inline mr-1 h-4 w-4" />
+                        Facial Verification
+                      </label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Capture guest's photo for verification
+                    </p>
+                    
+                    {!facialPhoto && !isCameraActive ? (
+                      <button
+                        type="button"
+                        onClick={startCamera}
+                        className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors"
+                      >
+                        <Camera className="mr-2 h-5 w-5 text-gray-400" />
+                        <span className="text-sm text-gray-600">
+                          Start Camera
+                        </span>
+                      </button>
+                    ) : isCameraActive ? (
+                      <div className="border border-gray-300 rounded-lg p-4">
+                        <video
+                          id="cameraVideo"
+                          autoPlay
+                          playsInline
+                          className="w-full rounded-lg mb-3"
+                        />
+                        <div className="flex space-x-2">
+                          <button
+                            type="button"
+                            onClick={capturePhoto}
+                            className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                          >
+                            Capture Photo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={stopCamera}
+                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="border border-gray-300 rounded-lg p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start space-x-3 flex-1">
+                            <img
+                              src={facialPhoto!}
+                              alt="Guest Photo"
+                              className="w-24 h-24 object-cover rounded border border-gray-200"
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-900">Photo captured</p>
+                              <p className="text-xs text-gray-500">Ready for verification</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={removeFacialPhoto}
+                            className="ml-3 text-red-600 hover:text-red-700 p-1"
+                            title="Remove photo"
+                          >
+                            <X className="h-5 w-5" />
+                          </button>
+                        </div>
+                        
+                        {/* Face Matching in Progress */}
+                        {isMatchingFace && (
+                          <div className="mt-4 pt-4 border-t border-gray-200">
+                            <div className="flex items-center justify-center space-x-2">
+                              <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
+                              <span className="text-sm font-medium text-gray-700">Matching face...</span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Face Match Score - Shows for both _obs (15%) and _cta (100%) files */}
+                        {(isFlaggedFile || isVerifiedFile) && showFaceMatchScore && !isMatchingFace && (
+                          <div className="mt-4 pt-4 border-t border-gray-200">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-sm font-medium text-gray-700">Face Match Score</span>
+                              <span className={`text-sm font-bold ${faceMatchScore >= 80 ? 'text-green-600' : 'text-red-600'}`}>
+                                {faceMatchScore}%
+                              </span>
+                            </div>
+                            <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full transition-all duration-500 ${faceMatchScore >= 80 ? 'bg-green-500' : 'bg-red-500'}`}
+                                style={{ width: `${faceMatchScore}%` }}
+                              />
+                            </div>
+                            {faceMatchScore >= 80 ? (
+                              <p className="text-xs text-green-600 mt-2 flex items-center">
+                                <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                                High match - Identity verified
+                              </p>
+                            ) : (
+                              <p className="text-xs text-red-600 mt-2 flex items-center">
+                                <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                                Low match - ID may not match the person
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    </div>
                   </div>
 
                   <div>
@@ -670,7 +958,7 @@ export default function NewBooking() {
                       <option value="">Select a room type</option>
                       {roomTypes.map((type) => (
                         <option key={type.id} value={type.id}>
-                          {type.name} (${type.price}/night)
+                          {type.name} (₦{type.price}/night)
                         </option>
                       ))}
                     </select>

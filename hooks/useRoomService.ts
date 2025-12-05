@@ -4,17 +4,50 @@ import axios from '../lib/axios';
 // Types
 export interface ServiceRequest {
   id: number;
-  reservation_id: number;
+  request_number: string;
+  room_id: number;
   guest_id: number;
-  service_type: 'room-service' | 'housekeeping' | 'maintenance' | 'special-requests' | 'transportation' | 'general-assistance';
-  status: 'pending' | 'in-progress' | 'completed' | 'cancelled';
-  priority: 'low' | 'medium' | 'high';
+  type: string; // 'housekeeping' | 'maintenance' | 'room_service'
+  service_type: string; // 'room-service' | 'housekeeping' | 'maintenance' | 'cleaning' | 'towels' | etc.
+  issue_type?: string; // For maintenance: 'electrical' | 'plumbing' | 'air_conditioning' | etc.
+  status: 'pending' | 'in_progress' | 'in-progress' | 'completed' | 'cancelled';
+  priority: 'low' | 'normal' | 'medium' | 'high';
   description: string;
   notes?: string;
+  preferred_time?: string | null;
+  estimated_time?: string | null;
   assigned_to?: string;
+  assigned_staff_id?: number | null;
+  assigned_at?: string | null;
+  completed_at?: string | null;
+  completed_by?: string;
+  cancellation_reason?: string;
   requested_at: string;
-  completed_at?: string;
-  // Populated fields
+  created_at: string;
+  updated_at: string;
+  // Nested objects from API
+  room?: {
+    id: number;
+    room_number: string;
+    room_type: string;
+    floor: number;
+    capacity: number;
+    price_per_night: number;
+    status: string;
+    description: string;
+    amenities: string;
+    bed_type: string;
+  };
+  guest?: {
+    id: number;
+    name: string;
+    email: string;
+    phone: string;
+    nationality: string;
+    id_type: string;
+    id_number: string;
+  };
+  // Computed/flattened fields for UI compatibility
   room_number?: string;
   guest_name?: string;
   guest_phone?: string;
@@ -127,6 +160,39 @@ export const roomServiceKeys = {
 
 // Service Requests Queries
 
+// Helper to normalize service type from API format to frontend format
+const normalizeServiceType = (type: string, serviceType: string): string => {
+  // If service_type is set and meaningful, use it
+  if (serviceType && serviceType !== '') {
+    // Convert room-service format
+    if (serviceType === 'room-service') return 'room-service';
+    // For housekeeping subtypes (cleaning, towels, bedding, etc.), return 'housekeeping'
+    if (['cleaning', 'towels', 'bedding', 'amenities', 'turndown'].includes(serviceType)) {
+      return 'housekeeping';
+    }
+    return serviceType;
+  }
+  // Fall back to type field
+  if (type === 'room_service') return 'room-service';
+  if (type === 'housekeeping') return 'housekeeping';
+  if (type === 'maintenance') return 'maintenance';
+  return type || '';
+};
+
+// Helper to transform API response and flatten nested objects
+const transformServiceRequest = (request: any): ServiceRequest => ({
+  ...request,
+  // Flatten nested room data
+  room_number: request.room?.room_number || '',
+  // Flatten nested guest data
+  guest_name: request.guest?.name || '',
+  guest_phone: request.guest?.phone || '',
+  // Normalize status (backend uses in_progress, frontend uses in-progress)
+  status: request.status === 'in_progress' ? 'in-progress' : request.status,
+  // Normalize service_type for frontend compatibility
+  service_type: normalizeServiceType(request.type, request.service_type),
+});
+
 export const useGetServiceRequests = (params?: {
   page?: number;
   page_size?: number;
@@ -138,7 +204,8 @@ export const useGetServiceRequests = (params?: {
     queryFn: async () => {
       const response = await axios.get('/service-requests', { params });
       // Backend returns { data: { data: [...], pagination: {...} } }
-      return response.data.data?.data || response.data.data as ServiceRequest[];
+      const rawData = response.data.data?.data || response.data.data || [];
+      return rawData.map(transformServiceRequest) as ServiceRequest[];
     },
   });
 };
@@ -148,7 +215,7 @@ export const useGetServiceRequest = (id: number) => {
     queryKey: roomServiceKeys.serviceRequest(id),
     queryFn: async () => {
       const response = await axios.get(`/service-requests/${id}`);
-      return response.data.data as ServiceRequest;
+      return transformServiceRequest(response.data.data) as ServiceRequest;
     },
     enabled: !!id,
   });
@@ -159,7 +226,8 @@ export const useGetServiceRequestsByStatus = (status: string) => {
     queryKey: roomServiceKeys.serviceRequestsByStatus(status),
     queryFn: async () => {
       const response = await axios.get(`/service-requests`, { params: { status } });
-      return response.data.data?.data || response.data.data as ServiceRequest[];
+      const rawData = response.data.data?.data || response.data.data || [];
+      return rawData.map(transformServiceRequest) as ServiceRequest[];
     },
     enabled: !!status,
   });

@@ -138,7 +138,6 @@ export default function Navbar() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 group">
-            <img src="/logo.png" alt="IWEApp Logo" className="w-38 h-38" />
           </Link>
 
           {/* Desktop Navigation */}

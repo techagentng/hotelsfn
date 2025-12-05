@@ -55,33 +55,46 @@ export default function Landing() {
       />
       
       {/* Hero Section */}
-      <section className="pt-20 md:pt-32 pb-16 md:pb-20 px-4">
-        <div className="max-w-6xl mx-auto text-center">
+      <section className="relative pt-20 md:pt-32 pb-16 md:pb-20 px-4 min-h-screen flex items-center overflow-hidden">
+        {/* Video Background */}
+        <div className="absolute inset-0 z-0">
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="w-full h-full object-cover"
+          >
+            <source src="/movie.mov" type="video/quicktime" />
+            <source src="/movie.mov" type="video/mp4" />
+          </video>
+          {/* Dark overlay for better text readability */}
+          <div className="absolute inset-0 bg-black/50" />
+        </div>
+        
+        <div className="max-w-6xl mx-auto text-center relative z-10">
           <AnimatedWrapper variants={fadeInUp}>
             <motion.div
-              className="inline-block px-3 md:px-4 py-1.5 md:py-2 rounded-full mb-4 md:mb-6"
-              style={{ backgroundColor: 'var(--bg-secondary)' }}
+              className="inline-block px-3 md:px-4 py-1.5 md:py-2 rounded-full mb-4 md:mb-6 bg-white/20 backdrop-blur-sm"
             >
-              <span className="text-xs md:text-sm font-medium" style={{ color: 'var(--accent-primary)' }}>
+              <span className="text-xs md:text-sm font-medium text-white">
                 ✨ {t('landing.welcome')}{' '}
-               <span style={{ color: 'var(--accent-primary)' }}>IWEAPP</span>
+               <span className="text-yellow-400">KTECH</span>
               </span>
             </motion.div>
           </AnimatedWrapper>
 
           <AnimatedWrapper variants={fadeInUp} delay={0.1}>
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold mb-4 md:mb-6 leading-tight">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold mb-4 md:mb-6 leading-tight text-white drop-shadow-lg">
               {t('landing.welcome2')}{' '}
-              {/* <span style={{ color: 'var(--accent-primary)' }}>IWEAPP</span> */}
             </h1>
           </AnimatedWrapper>
 
           <AnimatedWrapper variants={fadeInUp} delay={0.2}>
             <p 
-              className="text-base sm:text-lg md:text-xl lg:text-2xl mb-6 md:mb-8 max-w-3xl mx-auto px-2"
-              style={{ color: 'var(--text-secondary)' }}
+              className="text-base sm:text-lg md:text-xl lg:text-2xl mb-6 md:mb-8 max-w-3xl mx-auto px-2 text-gray-200"
             >
-              {t('landing.tagline')}
+              {t('landing.tagline')} 
               {t('landing.subtagline')}
             </p>
           </AnimatedWrapper>

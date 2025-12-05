@@ -37,7 +37,7 @@ import {
 import type { CartItem, HousekeepingServiceType, MaintenanceIssueType } from '@/types/tablet';
 
 // For demo purposes - in production, this would come from device/session
-const ROOM_NUMBER = '101';
+const ROOM_NUMBER = '102';
 
 type Page = 'home' | 'menu' | 'orders' | 'services' | 'info';
 
@@ -133,20 +133,34 @@ export default function InRoomTablet() {
   };
 
   const handlePlaceOrder = async () => {
-    if (!guestInfo || cart.length === 0) return;
+    if (!guestInfo || cart.length === 0) {
+      toast.error('Unable to place order. Guest info or cart is missing.');
+      return;
+    }
+
+    // Validate required fields
+    if (!guestInfo.room?.id || !guestInfo.guest?.id) {
+      toast.error('Missing room or guest information.');
+      console.error('Guest info:', guestInfo);
+      return;
+    }
+
+    const orderData = {
+      room_id: Number(guestInfo.room.id),
+      guest_id: Number(guestInfo.guest.id),
+      items: cart.map((item) => ({
+        menu_item_id: Number(item.menu_item.id),
+        quantity: Number(item.quantity),
+        special_instructions: item.special_instructions || '',
+      })),
+      special_requests: specialRequests || '',
+      priority: 'normal' as const,
+    };
+
+    console.log('Placing order with data:', JSON.stringify(orderData, null, 2));
 
     try {
-      await placeOrder.mutateAsync({
-        room_id: guestInfo.room.id,
-        guest_id: guestInfo.guest.id,
-        items: cart.map((item) => ({
-          menu_item_id: item.menu_item.id,
-          quantity: item.quantity,
-          special_instructions: item.special_instructions || undefined,
-        })),
-        special_requests: specialRequests || undefined,
-        priority: 'normal',
-      });
+      await placeOrder.mutateAsync(orderData);
 
       toast.success('Order placed successfully!');
       setCart([]);
@@ -154,7 +168,15 @@ export default function InRoomTablet() {
       setShowCart(false);
       setCurrentPage('orders');
     } catch (error: any) {
-      toast.error(error.response?.data?.errors || 'Failed to place order');
+      console.error('Order error:', error.response?.data);
+      const errorMessage = error.response?.data?.errors || error.response?.data?.message || 'Failed to place order';
+      
+      // Show user-friendly error message
+      if (errorMessage.includes('not currently occupied')) {
+        toast.error('This room is not checked in. Please contact the front desk.');
+      } else {
+        toast.error(errorMessage);
+      }
     }
   };
 
@@ -511,7 +533,7 @@ export default function InRoomTablet() {
                     <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                        ${item.price.toFixed(2)}
+                        ₦{item.price.toFixed(2)}
                       </span>
                       <button
                         onClick={() => addToCart(item)}
@@ -540,7 +562,7 @@ export default function InRoomTablet() {
             <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
               <div className="p-6">
                 <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold">Your Cart</h2>
+                  <h2 className="text-2xl font-bold text-black">Your Cart</h2>
                   <button onClick={() => setShowCart(false)}>
                     <X className="w-6 h-6" />
                   </button>
@@ -555,16 +577,16 @@ export default function InRoomTablet() {
                         <div key={item.menu_item.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                           <div className="flex-1">
                             <h3 className="font-medium text-gray-900">{item.menu_item.name}</h3>
-                            <p className="text-sm text-gray-900">${item.menu_item.price.toFixed(2)} each</p>
+                            <p className="text-sm text-gray-900">₦{item.menu_item.price.toFixed(2)} each</p>
                           </div>
                           <div className="flex items-center space-x-3">
                             <button
                               onClick={() => updateQuantity(item.menu_item.id, -1)}
-                              className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center"
+                              className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center"
                             >
-                              <Minus className="w-4 h-4" />
+                              <Minus className="w-4 h-4 text-white" />
                             </button>
-                            <span className="font-medium w-8 text-center">{item.quantity}</span>
+                            <span className="font-medium w-8 text-center text-black">{item.quantity}</span>
                             <button
                               onClick={() => updateQuantity(item.menu_item.id, 1)}
                               className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center"
@@ -594,9 +616,9 @@ export default function InRoomTablet() {
                     </div>
 
                     <div className="border-t pt-4 mb-4">
-                      <div className="flex justify-between text-xl font-bold">
+                      <div className="flex justify-between text-xl font-bold text-black">
                         <span>Total:</span>
-                        <span>${cartTotal.toFixed(2)}</span>
+                        <span>₦{cartTotal.toFixed(2)}</span>
                       </div>
                     </div>
 
@@ -625,11 +647,11 @@ export default function InRoomTablet() {
           <div className="flex items-center justify-between">
             <button
               onClick={() => setCurrentPage('home')}
-              className="text-gray-900 hover:text-indigo-600"
+              className="text-black hover:text-indigo-600"
             >
               ← Back
             </button>
-            <h1 className="text-2xl font-bold">Your Orders</h1>
+            <h1 className="text-2xl font-bold text-black">Your Orders</h1>
             <div className="w-20"></div>
           </div>
         </div>
@@ -638,7 +660,7 @@ export default function InRoomTablet() {
           {!activeOrders || activeOrders.length === 0 ? (
             <div className="text-center py-12">
               <Clock className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-700">No active orders</p>
+              <p className="text-black">No active orders</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -646,10 +668,10 @@ export default function InRoomTablet() {
                 <div key={order.id} className="bg-white rounded-xl p-6 shadow-sm">
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900">{order.order_number}</h3>
-                      <p className="text-sm text-gray-900">Ordered at {formatTime(order.ordered_at)}</p>
+                      <h3 className="text-lg font-bold text-black">{order.order_number}</h3>
+                      <p className="text-sm text-black">Ordered at {formatTime(order.ordered_at)}</p>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    <span className={`px-3 py-1 rounded-full text-sm text-black font-medium ${
                       order.status === 'delivered' ? 'bg-green-100 text-green-800' :
                       order.status === 'delivering' ? 'bg-indigo-100 text-indigo-800' :
                       order.status === 'preparing' ? 'bg-blue-100 text-blue-800' :
@@ -678,7 +700,7 @@ export default function InRoomTablet() {
                               <Clock className="w-5 h-5" />
                             )}
                           </div>
-                          <p className="text-xs mt-1 capitalize">{status}</p>
+                          <p className="text-xs mt-1 capitalize text-black">{status}</p>
                         </div>
                       ))}
                     </div>
@@ -692,16 +714,16 @@ export default function InRoomTablet() {
                   )}
 
                   <div className="border-t pt-4">
-                    <p className="text-sm text-gray-900 mb-2 font-medium">Items:</p>
+                    <p className="text-sm text-black mb-2 font-medium">Items:</p>
                     {order.items?.map((item: any, idx: number) => (
-                      <p key={idx} className="text-sm">
+                      <p key={idx} className="text-sm text-black">
                         {item.quantity}x {item.name}
                       </p>
                     ))}
                   </div>
 
                   <div className="mt-4 flex justify-between items-center">
-                    <span className="text-lg font-bold">${order.total_amount?.toFixed(2)}</span>
+                    <span className="text-lg font-bold text-black">₦{order.total_amount?.toFixed(2)}</span>
                   </div>
                 </div>
               ))}
@@ -724,7 +746,7 @@ export default function InRoomTablet() {
             >
               ← Back
             </button>
-            <h1 className="text-2xl font-bold">Services</h1>
+            <h1 className="text-2xl font-bold text-black">Services</h1>
             <div className="w-20"></div>
           </div>
         </div>
@@ -757,7 +779,7 @@ export default function InRoomTablet() {
           {/* Service Requests */}
           {serviceRequests && serviceRequests.length > 0 && (
             <div className="bg-white rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4">Your Requests</h2>
+              <h2 className="text-xl font-bold mb-4 text-black">Your Requests</h2>
               <div className="space-y-3">
                 {serviceRequests.map((request) => (
                   <div key={request.id} className="p-4 bg-gray-50 rounded-lg">

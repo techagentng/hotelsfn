@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const exemptedPaths = ['/', '/login', '/signup', '/pricing', '/dashboard', '/example-chat', '/auth/google/callback', '/bookings', '/bookings/new', '/rooms', '/preferences'];
+const exemptedPaths = ['/', '/login', '/signup', '/pricing', '/dashboard', '/example-chat', '/auth/google/callback', '/bookings', '/bookings/new', '/rooms', '/preferences', '/inroomtablet'];
 
 export function middleware(req: NextRequest) {
   const isAuthenticated = req.cookies.get('auth_token');

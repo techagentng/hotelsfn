@@ -196,7 +196,7 @@ export default function Dashboard() {
               <h2 className="text-xl font-bold">Total Revenue</h2>
               <span className="text-sm text-green-600 font-medium">+12.5%</span>
             </div>
-            <p className="text-2xl font-bold mb-4">$85,430</p>
+            <p className="text-2xl font-bold mb-4">₦85,430</p>
             <div className="h-40">
               <Chart
                 options={{

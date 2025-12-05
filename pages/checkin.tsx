@@ -992,8 +992,7 @@ export default function CheckIn() {
                     <div>
                       <p className="text-sm text-gray-500">Total Price</p>
                       <p className="font-medium flex items-center text-indigo-600">
-                        <DollarSign size={16} className="mr-2" />
-                        ${selectedGuest.totalPrice}
+                        ₦{selectedGuest.totalPrice}
                       </p>
                     </div>
                   </div>
@@ -1214,7 +1213,7 @@ export default function CheckIn() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 mb-1">Total Amount</p>
-                    <p className="font-bold text-lg text-gray-900">${selectedGuest.totalPrice}</p>
+                    <p className="font-bold text-lg text-gray-900">₦{selectedGuest.totalPrice}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600 mb-1">Booking ID</p>

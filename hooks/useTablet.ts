@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from '../lib/axios';
+import axios from '../lib/axiosPublic'; // Use public axios for tablet (no auth required)
 import {
   GuestRoomInfo,
   MenuItem,

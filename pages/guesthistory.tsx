@@ -795,7 +795,7 @@ export default function GuestHistory() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="font-semibold text-gray-900">${reservation.total_price}</p>
+                        <p className="font-semibold text-gray-900">₦{reservation.total_price}</p>
                         <span className={`text-xs font-semibold px-2 py-1 rounded ${
                           reservation.status === 'completed'
                             ? 'bg-green-100 text-green-800'
@@ -877,38 +877,6 @@ export default function GuestHistory() {
                       <p className="text-gray-500">No service usage data available</p>
                     </div>
                   )}
-                </div>
-              </div>
-
-              {/* AI Insights Box */}
-              <div className="mb-6 p-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg border border-indigo-200">
-                <div className="flex items-center mb-4">
-                  <Zap className="w-6 h-6 text-indigo-600 mr-2" />
-                  <h3 className="text-lg font-semibold text-gray-900">AI Insights</h3>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-700 mb-1">Meal Preference</p>
-                    <p className="text-sm text-gray-600">{selectedGuest.ai_insights?.meal_preference || 'No data available'}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-medium text-gray-700 mb-1">Room Preference</p>
-                    <p className="text-sm text-gray-600">{selectedGuest.ai_insights?.room_preference || 'No data available'}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-medium text-gray-700 mb-1">Service Pattern</p>
-                    <p className="text-sm text-gray-600">{selectedGuest.ai_insights?.service_pattern || 'No data available'}</p>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-3 border-t border-indigo-200">
-                    <span className="text-sm font-medium text-gray-700">Risk Score</span>
-                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getRiskScoreColor(selectedGuest.ai_insights?.risk_score || 'low')}`}>
-                      {selectedGuest.ai_insights?.risk_score ? selectedGuest.ai_insights.risk_score.charAt(0).toUpperCase() + selectedGuest.ai_insights.risk_score.slice(1) : 'Low'}
-                    </span>
-                  </div>
                 </div>
               </div>
 

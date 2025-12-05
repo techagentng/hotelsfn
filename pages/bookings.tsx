@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 import { Search, Filter, X, Calendar, User, Home, Clock, CheckCircle, XCircle, Download } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
-import { useGetReservations, useUpdateReservationStatus, useCancelReservation } from '../hooks/useReservations';
+import { useGetReservations, useUpdateReservationStatus, useCancelReservation, useCheckinReservation } from '../hooks/useReservations';
 import { toast } from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -105,6 +105,7 @@ export default function Bookings() {
   // Mutation hooks
   const updateStatus = useUpdateReservationStatus();
   const cancelReservation = useCancelReservation();
+  const checkinReservation = useCheckinReservation();
 
   // Extract reservations from API response
   const apiReservations = reservationsData?.data?.data || [];
@@ -198,6 +199,23 @@ export default function Bookings() {
       closeModal();
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to cancel booking');
+    }
+  };
+
+  const handleCheckinBooking = async () => {
+    if (!selectedBooking?.reservationId) return;
+    
+    try {
+      await checkinReservation.mutateAsync({
+        id: selectedBooking.reservationId,
+        room_key_issued: true,
+        payment_verified: true,
+        id_verified: true
+      });
+      toast.success('Guest checked in successfully!');
+      closeModal();
+    } catch (error: any) {
+      toast.error(error.response?.data?.errors || error.response?.data?.message || 'Failed to check in guest');
     }
   };
 
@@ -350,7 +368,7 @@ export default function Bookings() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          ${booking.total.toFixed(2)}
+                          ₦{booking.total.toFixed(2)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusStyles[booking.status]}`}>
@@ -481,7 +499,7 @@ export default function Bookings() {
                     <div>
                       <p className="text-sm text-gray-500">Total Stay</p>
                       <p className="font-medium">
-                        {calculateNights(selectedBooking.checkIn, selectedBooking.checkOut)} nights • ${selectedBooking.total.toFixed(2)}
+                        {calculateNights(selectedBooking.checkIn, selectedBooking.checkOut)} nights • ₦{selectedBooking.total.toFixed(2)}
                       </p>
                     </div>
                     <div>
@@ -551,7 +569,7 @@ Status: ${statusLabels[selectedBooking.status]}
 
 ${selectedBooking.specialRequests ? `Special Requests: ${selectedBooking.specialRequests}\n` : ''}
 -------------------------------------------
-TOTAL AMOUNT: $${selectedBooking.total.toFixed(2)}
+TOTAL AMOUNT: ₦${selectedBooking.total.toFixed(2)}
 -------------------------------------------
 
 Thank you for choosing our hotel!
@@ -604,6 +622,16 @@ Thank you for choosing our hotel!
                       {updateStatus.isPending ? 'Confirming...' : 'Confirm'}
                     </button>
                   </>
+                )}
+                {selectedBooking.status === 'confirmed' && (
+                  <button
+                    type="button"
+                    onClick={handleCheckinBooking}
+                    disabled={checkinReservation.isPending}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {checkinReservation.isPending ? 'Checking in...' : 'Check-in Guest'}
+                  </button>
                 )}
                 </div>
               </div>

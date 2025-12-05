@@ -2,6 +2,7 @@
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "@prisma/client": "^5.21.0",
+    "@reduxjs/toolkit": "^2.11.0",
     "@tailwindcss/postcss": "^4.1.16",
     "@tanstack/react-query": "^5.90.7",
     "@tanstack/react-query-devtools": "^5.90.2",
@@ -27,6 +28,8 @@
     "react-dom": "^19.2.0",
     "react-hot-toast": "^2.6.0",
     "react-i18next": "^16.2.4",
+    "react-redux": "^9.2.0",
+    "redux-persist": "^6.0.0",
     "tailwindcss": "^4.1.16",
     "typescript": "^5.9.3",
     "uuid": "^13.0.0"

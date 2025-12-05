@@ -14,6 +14,8 @@ interface DashboardStats {
   today_revenue: number;
   month_revenue: number;
   occupancy_rate: number;
+  fraud_score: number;
+  user_count: number;
 }
 
 interface RoomStatusSummary {

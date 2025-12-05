@@ -41,6 +41,9 @@ export interface DashboardStats {
   available_rooms_today: number;
   occupied_rooms_today: number;
   sold_out_rooms_today: number;
+  fraud_score: number;
+  user_count: number;
+  total_guests: number;
 }
 
 // Query Keys
@@ -169,6 +172,36 @@ export const useCancelReservation = () => {
       const { data } = await axios.put(`/reservations/${id}/cancel`, { 
         cancellation_reason,
         refund_amount 
+      });
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: reservationKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: reservationKeys.dashboard() });
+    },
+  });
+};
+
+export const useCheckinReservation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, actual_check_in_time, room_key_issued, payment_verified, id_verified, deposit_collected, notes }: { 
+      id: number; 
+      actual_check_in_time?: string;
+      room_key_issued?: boolean;
+      payment_verified?: boolean;
+      id_verified?: boolean;
+      deposit_collected?: number;
+      notes?: string;
+    }) => {
+      const { data } = await axios.post(`/reservations/${id}/checkin`, { 
+        actual_check_in_time,
+        room_key_issued,
+        payment_verified,
+        id_verified,
+        deposit_collected,
+        notes 
       });
       return data.data;
     },

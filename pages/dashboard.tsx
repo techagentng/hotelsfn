@@ -5,6 +5,7 @@ import { LayoutDashboard, Bed, Calendar, Settings, LogOut } from "lucide-react";
 import dynamic from 'next/dynamic';
 import Sidebar from "../components/Sidebar";
 import { useGetDashboardStats } from "../hooks/useReservations";
+import { useAppSelector } from "../store/hooks";
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
@@ -13,6 +14,10 @@ export default function Dashboard() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [showDropdown, setShowDropdown] = useState(false);
+  
+  // Get flagged bookings score from Redux
+  const flaggedScore = useAppSelector((state) => state.score.count);
+  console.log('Dashboard - Flagged Score from Redux:', flaggedScore);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
   // Fetch dashboard stats
@@ -82,12 +87,10 @@ export default function Dashboard() {
           <StatCard 
             title="New Booking Today" 
             value={dashboardStats?.new_bookings_today?.toString() || "0"} 
-            percent="65" 
           />
           <StatCard 
             title="Scheduled Bookings" 
             value={dashboardStats?.scheduled_bookings?.toString() || "0"} 
-            percent="47" 
           />
           <StatCard 
             title="Check In Today" 
@@ -101,17 +104,22 @@ export default function Dashboard() {
           />
         </section>
 
-        {/* Available Rooms */}
-        <section className="grid grid-cols-2 gap-6 mb-10">
+        {/* Available Rooms & Stats */}
+        <section className="grid grid-cols-3 gap-6 mb-10">
           <RoomBar 
             title="Available Rooms Today" 
             value={dashboardStats?.available_rooms_today || 0} 
             max={dashboardStats?.total_rooms || 500} 
           />
-          <RoomBar 
-            title="Sold Out Rooms Today" 
-            value={dashboardStats?.sold_out_rooms_today || 0} 
-            max={dashboardStats?.total_rooms || 500} 
+          <StatCard 
+            title="Flagged bookings" 
+            value={flaggedScore.toString()} 
+            orange
+          />
+          <StatCard 
+            title="Guest Count" 
+            value={dashboardStats?.total_guests?.toString() || "0"} 
+            blue
           />
         </section>
 
@@ -224,7 +232,7 @@ export default function Dashboard() {
               <h2 className="text-xl font-bold">Total Revenue</h2>
               <span className="text-sm text-green-600 font-medium">+12.5%</span>
             </div>
-            <p className="text-2xl font-bold mb-4">$85,430</p>
+            <p className="text-2xl font-bold mb-4">₦85,430</p>
             <div className="h-40">
               <Chart
                 options={{
@@ -334,8 +342,8 @@ function MenuItem({
   );
 }
 
-function StatCard({ title, value, percent, green, red }: any) {
-  const color = green ? "text-green-500" : red ? "text-red-500" : "text-yellow-500";
+function StatCard({ title, value, percent, green, red, orange, blue, purple }: any) {
+  const color = green ? "text-green-500" : red ? "text-red-500" : orange ? "text-orange-500" : blue ? "text-blue-500" : purple ? "text-purple-500" : "text-yellow-500";
 
   return (
     <div className="bg-white p-6 rounded-xl shadow flex flex-col">
@@ -345,6 +353,9 @@ function StatCard({ title, value, percent, green, red }: any) {
         {percent && <span className={`${color} text-xl font-bold`}>{percent}%</span>}
         {green && <span className="text-green-500 text-2xl">⬤</span>}
         {red && <span className="text-red-500 text-2xl">⬤</span>}
+        {orange && <span className="text-orange-500 text-2xl">⬤</span>}
+        {blue && <span className="text-blue-500 text-2xl">⬤</span>}
+        {purple && <span className="text-purple-500 text-2xl">⬤</span>}
       </div>
     </div>
   );

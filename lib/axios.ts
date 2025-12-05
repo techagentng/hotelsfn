@@ -28,6 +28,9 @@ axiosInstance.interceptors.request.use(
   }
 );
 
+// Pages that should not redirect to login on 401
+const noAuthRedirectPages = ['/inroomtablet'];
+
 // Response interceptor for error handling
 axiosInstance.interceptors.response.use(
   (response) => response,
@@ -36,14 +39,19 @@ axiosInstance.interceptors.response.use(
     if (error.response?.status === 401) {
       console.error('Unauthorized request - redirecting to login');
       
-      // Clear session
+      // Clear session and redirect, but skip for certain pages
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('user_role');
-        localStorage.removeItem('user_data');
+        const currentPath = window.location.pathname;
+        const shouldSkipRedirect = noAuthRedirectPages.some(page => currentPath.startsWith(page));
         
-        // Redirect to login page
-        window.location.href = '/login';
+        if (!shouldSkipRedirect) {
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('user_role');
+          localStorage.removeItem('user_data');
+          
+          // Redirect to login page
+          window.location.href = '/login';
+        }
       }
     }
     
