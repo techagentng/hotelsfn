@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/router';
-import { Search, Filter, X, Calendar, User, Home, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Search, Filter, X, Calendar, User, Home, Clock, CheckCircle, XCircle, Download } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import { useGetReservations, useUpdateReservationStatus, useCancelReservation } from '../hooks/useReservations';
 import { toast } from 'react-hot-toast';
+import { QRCodeSVG } from 'qrcode.react';
 
 // Consistent date formatting to avoid hydration errors
 const formatDate = (dateString: string) => {
@@ -494,7 +495,89 @@ export default function Bookings() {
                 </div>
               </div>
 
-              <div className="mt-8 flex justify-end space-x-3">
+              {/* QR Code */}
+              <div className="mt-6 border-t pt-6">
+                <div className="flex justify-center">
+                  <div className="text-center">
+                    <div className="mb-2 p-4 bg-white inline-block rounded-lg shadow-sm">
+                      <QRCodeSVG
+                        value={JSON.stringify({
+                          bookingId: selectedBooking.id,
+                          guestName: selectedBooking.guestName,
+                          room: selectedBooking.room,
+                          checkIn: selectedBooking.checkIn,
+                          checkOut: selectedBooking.checkOut,
+                          total: selectedBooking.total
+                        })}
+                        size={150}
+                        level="H"
+                        includeMargin={false}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 font-mono mt-2">{selectedBooking.id}</p>
+                    <p className="text-xs text-gray-400 mt-1">Scan for booking details</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex justify-between items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Generate receipt content
+                    const receiptContent = `
+===========================================
+           HOTEL BOOKING RECEIPT
+===========================================
+
+Booking ID: ${selectedBooking.id}
+Date: ${new Date().toLocaleDateString()}
+
+-------------------------------------------
+GUEST INFORMATION
+-------------------------------------------
+Name: ${selectedBooking.guestName}
+Email: ${selectedBooking.guestEmail}
+Guests: ${selectedBooking.guestCount}
+
+-------------------------------------------
+BOOKING DETAILS
+-------------------------------------------
+Room: ${selectedBooking.room} - ${selectedBooking.roomType}
+Check-in: ${new Date(selectedBooking.checkIn).toLocaleDateString()}
+Check-out: ${new Date(selectedBooking.checkOut).toLocaleDateString()}
+Nights: ${calculateNights(selectedBooking.checkIn, selectedBooking.checkOut)}
+Status: ${statusLabels[selectedBooking.status]}
+
+${selectedBooking.specialRequests ? `Special Requests: ${selectedBooking.specialRequests}\n` : ''}
+-------------------------------------------
+TOTAL AMOUNT: $${selectedBooking.total.toFixed(2)}
+-------------------------------------------
+
+Thank you for choosing our hotel!
+
+===========================================
+                    `.trim();
+
+                    // Create blob and download
+                    const blob = new Blob([receiptContent], { type: 'text/plain' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `receipt-${selectedBooking.id}.txt`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    toast.success('Receipt downloaded!');
+                  }}
+                  className="inline-flex items-center px-4 py-2 border border-indigo-300 rounded-md shadow-sm text-sm font-medium text-indigo-700 bg-white hover:bg-indigo-50"
+                >
+                  <Download size={16} className="mr-2" />
+                  Download Receipt
+                </button>
+                
+                <div className="flex space-x-3">
                 <button
                   type="button"
                   onClick={closeModal}
@@ -522,6 +605,7 @@ export default function Bookings() {
                     </button>
                   </>
                 )}
+                </div>
               </div>
             </div>
           </div>

@@ -12,7 +12,7 @@ import {
   HotelInfo,
   ExpressCheckoutRequest,
   ExpressCheckoutResponse,
-} from '../types/tablet';
+} from '@/types/tablet';
 
 // Query Keys
 export const tabletKeys = {

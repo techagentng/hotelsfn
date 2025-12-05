@@ -37,7 +37,7 @@ export default function Sidebar() {
   return (
     <aside className="w-64 bg-white shadow-lg p-6 flex flex-col justify-between">
       <div>
-        <div className="text-2xl font-bold mb-10 text-indigo-600">LogoType</div>
+        <div className="text-2xl font-bold mb-10 text-indigo-600">KTECH Hotel</div>
         <nav className="space-y-2">
           <MenuItem 
             icon={<LayoutDashboard size={20} />} 
@@ -56,7 +56,7 @@ export default function Sidebar() {
           />
           <MenuItem 
             icon={<LogIn size={20} />} 
-            label="Check-In" 
+            label="Check-In / Out" 
             href="/checkin"
           />
           <MenuItem 

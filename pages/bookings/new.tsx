@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { ArrowLeft, Save, Calendar as CalendarIcon, User, Users, Home, X, Loader2, Search } from 'lucide-react';
+import { ArrowLeft, Save, Calendar as CalendarIcon, User, Users, Home, X, Loader2, Search, Upload, FileText, Eye } from 'lucide-react';
 import Sidebar from '../../components/Sidebar';
 import { useGetGuests } from '../../hooks/useGuests';
 import axios from '../../lib/axios';
@@ -43,11 +43,76 @@ export default function NewBooking() {
     specialRequests: '',
   });
 
+  // ID Document upload state
+  const [idDocument, setIdDocument] = useState<File | null>(null);
+  const [idDocumentPreview, setIdDocumentPreview] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationComplete, setVerificationComplete] = useState(false);
+
   const [guestSearch, setGuestSearch] = useState('');
   const [showGuestDropdown, setShowGuestDropdown] = useState(false);
   const { data: guestsData } = useGetGuests({ search: guestSearch, page_size: 10 });
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Handle ID document upload
+  const handleIdDocumentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!validTypes.includes(file.type)) {
+      setError('Please upload a valid image (JPEG, PNG, WebP) or PDF file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('File size must be less than 5MB');
+      return;
+    }
+
+    setIdDocument(file);
+    setError(null);
+    setVerificationComplete(false);
+
+    // Create preview for images
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setIdDocumentPreview(reader.result as string);
+        // Start AI verification simulation
+        simulateAIVerification();
+      };
+      reader.readAsDataURL(file);
+    } else {
+      // For PDFs, just show file info
+      setIdDocumentPreview(null);
+      // Start AI verification simulation
+      simulateAIVerification();
+    }
+  };
+
+  // Simulate AI verification process
+  const simulateAIVerification = () => {
+    setIsVerifying(true);
+    setVerificationComplete(false);
+    
+    // Simulate AI processing (3 seconds)
+    setTimeout(() => {
+      setIsVerifying(false);
+      setVerificationComplete(true);
+    }, 3000);
+  };
+
+  // Remove uploaded document
+  const handleRemoveDocument = () => {
+    setIdDocument(null);
+    setIdDocumentPreview(null);
+    setIsVerifying(false);
+    setVerificationComplete(false);
+  };
 
   // Handle guest selection
   const handleGuestSelect = (guest: any) => {
@@ -165,16 +230,46 @@ export default function NewBooking() {
     setError(null);
     
     try {
-      // Use axios to call the backend API
-      const response = await axios.post('/reservations', {
-        guest_id: parseInt(formData.guestId),
-        room_id: parseInt(formData.roomId),
-        check_in_date: formData.checkIn,
-        check_out_date: formData.checkOut,
-        number_of_guests: formData.guestCount,
-        special_requests: formData.specialRequests || undefined,
-        payment_method: 'credit_card', // Default payment method
-      });
+      console.log('Submitting form with idDocument:', idDocument ? 'YES' : 'NO');
+      
+      // Always use FormData for consistency with backend
+      const formDataToSend = new FormData();
+      
+      // Guest information - either existing guest ID or new guest details
+      if (formData.guestId) {
+        // Existing guest
+        formDataToSend.append('guest_id', formData.guestId);
+        console.log('Using existing guest ID:', formData.guestId);
+      } else {
+        // New guest - send guest details
+        formDataToSend.append('guest_name', formData.guestName);
+        formDataToSend.append('guest_email', formData.guestEmail);
+        formDataToSend.append('guest_phone', formData.guestPhone);
+        formDataToSend.append('guest_id_type', formData.guestIdType.toLowerCase()); // passport, drivers_license, etc.
+        formDataToSend.append('guest_id_number', formData.guestIdNumber);
+        console.log('Creating new guest:', formData.guestName);
+      }
+      
+      // Reservation fields
+      formDataToSend.append('room_id', formData.roomId);
+      formDataToSend.append('check_in_date', formData.checkIn);
+      formDataToSend.append('check_out_date', formData.checkOut);
+      formDataToSend.append('number_of_guests', formData.guestCount.toString());
+      formDataToSend.append('payment_method', 'credit_card');
+      
+      if (formData.specialRequests) {
+        formDataToSend.append('special_requests', formData.specialRequests);
+      }
+      
+      // Add ID document if uploaded
+      if (idDocument) {
+        formDataToSend.append('id_document', idDocument);
+        console.log('File attached to FormData');
+      }
+      
+      console.log('Sending FormData to backend...');
+      // Let axios automatically set Content-Type with proper boundary
+      const response = await axios.post('/reservations', formDataToSend);
       
       // Redirect to bookings list with success message
       router.push({
@@ -182,8 +277,10 @@ export default function NewBooking() {
         query: { success: 'Booking created successfully' },
       });
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Error creating booking');
-      console.error('Booking error:', err);
+      console.error('Full error object:', err);
+      console.error('Error response:', err.response?.data);
+      console.error('Error status:', err.response?.status);
+      setError(err.response?.data?.error || err.response?.data?.errors || err.message || 'Error creating booking');
     } finally {
       setLoading(false);
     }
@@ -429,6 +526,104 @@ export default function NewBooking() {
                       }`}
                       placeholder="Enter ID number"
                     />
+                  </div>
+
+                  {/* ID Document Upload */}
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <FileText className="inline mr-1 h-4 w-4" />
+                      Upload ID Document (Optional)
+                    </label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Upload a copy of the guest's ID (Passport, Driver's License, etc.)
+                    </p>
+                    
+                    {!idDocument ? (
+                      <div className="relative">
+                        <input
+                          type="file"
+                          id="idDocument"
+                          accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
+                          onChange={handleIdDocumentUpload}
+                          className="hidden"
+                        />
+                        <label
+                          htmlFor="idDocument"
+                          className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors"
+                        >
+                          <Upload className="mr-2 h-5 w-5 text-gray-400" />
+                          <span className="text-sm text-gray-600">
+                            Click to upload or drag and drop
+                          </span>
+                        </label>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Supported formats: JPEG, PNG, WebP, PDF (Max 5MB)
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="border border-gray-300 rounded-lg p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start space-x-3 flex-1">
+                            {idDocumentPreview ? (
+                              <div className="relative group">
+                                <img
+                                  src={idDocumentPreview}
+                                  alt="ID Document Preview"
+                                  className="w-24 h-24 object-cover rounded border border-gray-200"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => window.open(idDocumentPreview, '_blank')}
+                                  className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 flex items-center justify-center rounded transition-all"
+                                >
+                                  <Eye className="text-white opacity-0 group-hover:opacity-100 h-6 w-6" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="w-24 h-24 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
+                                <FileText className="h-8 w-8 text-gray-400" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">
+                                {idDocument.name}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {(idDocument.size / 1024).toFixed(2)} KB
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {idDocument.type}
+                              </p>
+                              
+                              {/* AI Verification Status */}
+                              {isVerifying && (
+                                <div className="flex items-center mt-2 text-indigo-600">
+                                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                                  <span className="text-sm font-semibold">Verifying with AI...</span>
+                                </div>
+                              )}
+                              
+                              {verificationComplete && !isVerifying && (
+                                <div className="flex items-center mt-2 text-green-600">
+                                  <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                  </svg>
+                                  <span className="text-sm font-semibold">AI ID verification completed</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleRemoveDocument}
+                            className="ml-3 text-red-600 hover:text-red-700 p-1"
+                            title="Remove document"
+                          >
+                            <X className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div>

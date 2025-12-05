@@ -6,9 +6,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/a
 // Create axios instance
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  // Don't set default Content-Type - let each request set its own
+  // (FormData needs multipart/form-data, JSON needs application/json)
 });
 
 // Request interceptor to add auth token

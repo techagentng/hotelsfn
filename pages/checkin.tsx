@@ -18,10 +18,18 @@ import {
   DollarSign,
   FileText,
   QrCode,
+  Utensils,
+  Home,
+  Activity,
+  RefreshCw,
+  Lightbulb,
 } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
-import { useGetReservations } from '../hooks/useReservations';
+import { useGetReservations, useCheckoutReservation } from '../hooks/useReservations';
+import { useGetGuestAIInsights } from '../hooks/useGuests';
 import { toast } from 'react-hot-toast';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from '../lib/axios';
 
 // Consistent date formatting to avoid hydration errors
 const formatDate = (dateString: string) => {
@@ -37,6 +45,7 @@ type CheckinStatus = 'pending' | 'checked-in' | 'completed' | 'no-show';
 interface CheckinGuest {
   id: string;
   bookingId: string;
+  guestId?: number; // For AI insights
   guestName: string;
   guestEmail: string;
   guestPhone: string;
@@ -79,6 +88,7 @@ const mockCheckIns: CheckinGuest[] = [
   {
     id: 'CI-001',
     bookingId: 'BK-1001',
+    guestId: 5, // Sample guest ID for testing
     guestName: 'John Doe',
     guestEmail: 'john@example.com',
     guestPhone: '+1 234 567 8900',
@@ -194,6 +204,38 @@ export default function CheckIn() {
   const itemsPerPage = 10;
   const [showManualCheckin, setShowManualCheckin] = useState(false);
   const [manualCheckinStep, setManualCheckinStep] = useState<'search' | 'verify' | 'complete'>('search');
+  
+  // Checkout states
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [additionalCharges, setAdditionalCharges] = useState('');
+  const [checkoutNotes, setCheckoutNotes] = useState('');
+  
+  // Checkout mutation
+  const checkoutMutation = useCheckoutReservation();
+  
+  // AI Insights hooks
+  const queryClient = useQueryClient();
+  const { data: aiInsights, isLoading: insightsLoading } = useGetGuestAIInsights(
+    selectedGuest?.guestId || 0
+  );
+  
+  const refreshInsights = useMutation({
+    mutationFn: async (guestId: number) => {
+      await axios.post(`/guests/${guestId}/ai-insights/refresh`);
+    },
+    onSuccess: () => {
+      if (selectedGuest?.guestId) {
+        queryClient.invalidateQueries({ 
+          queryKey: ['guests', selectedGuest.guestId, 'ai-insights'] 
+        });
+      }
+      toast.success('Insights refreshed!');
+    },
+    onError: () => {
+      toast.error('Failed to refresh insights');
+    },
+  });
+  
   const [manualFormData, setManualFormData] = useState({
     bookingId: '',
     guestName: '',
@@ -263,6 +305,27 @@ export default function CheckIn() {
 
   const closeModal = () => {
     setSelectedGuest(null);
+    setShowCheckoutModal(false);
+    setAdditionalCharges('');
+    setCheckoutNotes('');
+  };
+
+  const handleCheckout = async () => {
+    if (!selectedGuest?.bookingId) return;
+
+    try {
+      await checkoutMutation.mutateAsync({
+        id: parseInt(selectedGuest.bookingId),
+        additional_charges: additionalCharges ? parseFloat(additionalCharges) : undefined,
+        notes: checkoutNotes || undefined,
+      });
+
+      toast.success('Check-out successful!');
+      setShowCheckoutModal(false);
+      closeModal();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to process checkout');
+    }
   };
 
   const clearFilters = () => {
@@ -976,6 +1039,105 @@ export default function CheckIn() {
                 </div>
               </div>
 
+              {/* AI Insights Section */}
+              {selectedGuest.guestId && (
+                <div className="mb-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                      <Lightbulb size={20} className="mr-2 text-indigo-600" />
+                      AI Insights
+                    </h3>
+                    <button
+                      onClick={() => selectedGuest.guestId && refreshInsights.mutate(selectedGuest.guestId)}
+                      disabled={refreshInsights.isPending || insightsLoading}
+                      className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1 disabled:opacity-50"
+                      title="Refresh insights"
+                    >
+                      <RefreshCw 
+                        size={16} 
+                        className={refreshInsights.isPending ? 'animate-spin' : ''} 
+                      />
+                      Refresh
+                    </button>
+                  </div>
+
+                  {insightsLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <RefreshCw className="w-5 h-5 animate-spin text-indigo-600 mr-2" />
+                      <span className="text-sm text-gray-600">Analyzing preferences...</span>
+                    </div>
+                  ) : aiInsights ? (
+                    <div className="space-y-4">
+                      <div className="flex items-start">
+                        <Utensils className="w-5 h-5 text-indigo-600 mr-3 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-700 mb-1">Meal Preference</p>
+                          <p className="text-sm text-gray-600">
+                            {aiInsights.meal_preference || (
+                              <span className="italic text-gray-400">No meal history available</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start">
+                        <Home className="w-5 h-5 text-indigo-600 mr-3 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-700 mb-1">Room Preference</p>
+                          <p className="text-sm text-gray-600">
+                            {aiInsights.room_preference || (
+                              <span className="italic text-gray-400">No booking history available</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start">
+                        <Activity className="w-5 h-5 text-indigo-600 mr-3 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-700 mb-1">Service Pattern</p>
+                          <p className="text-sm text-gray-600">
+                            {aiInsights.service_pattern || (
+                              <span className="italic text-gray-400">No service history available</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      {aiInsights.recommendations && aiInsights.recommendations.length > 0 && (
+                        <div className="pt-3 border-t border-indigo-200">
+                          <p className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                            <Lightbulb size={16} className="mr-2 text-indigo-600" />
+                            Recommendations
+                          </p>
+                          <ul className="space-y-1">
+                            {aiInsights.recommendations.map((rec, i) => (
+                              <li key={i} className="text-sm text-gray-600 flex items-start">
+                                <span className="mr-2">•</span>
+                                <span>{rec}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {aiInsights.risk_score && aiInsights.risk_score !== 'low' && (
+                        <div className={`pt-3 border-t border-indigo-200 flex items-center ${
+                          aiInsights.risk_score === 'high' ? 'text-red-600' : 'text-yellow-600'
+                        }`}>
+                          <AlertCircle size={16} className="mr-2" />
+                          <span className="text-sm font-medium">
+                            Risk Score: {aiInsights.risk_score.toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No insights available yet</p>
+                  )}
+                </div>
+              )}
+
               {selectedGuest.notes && (
                 <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
                   <p className="text-sm text-blue-900">
@@ -1010,6 +1172,104 @@ export default function CheckIn() {
                     </button>
                   </>
                 )}
+                {selectedGuest.status === 'checked-in' && (
+                  <button
+                    type="button"
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+                    onClick={() => setShowCheckoutModal(true)}
+                  >
+                    Checkout Guest
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Checkout Modal */}
+      {showCheckoutModal && selectedGuest && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-8 z-50">
+          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-3xl font-bold text-gray-900">Checkout</h2>
+                <button
+                  onClick={() => setShowCheckoutModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-8 h-8" />
+                </button>
+              </div>
+
+              <div className="mb-6 p-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Guest Name</p>
+                    <p className="font-bold text-lg text-gray-900">{selectedGuest.guestName}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Room Number</p>
+                    <p className="font-bold text-lg text-gray-900">{selectedGuest.roomNumber}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Total Amount</p>
+                    <p className="font-bold text-lg text-gray-900">${selectedGuest.totalPrice}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Booking ID</p>
+                    <p className="font-bold text-lg text-gray-900">{selectedGuest.bookingId}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Additional Charges (Optional)
+                  </label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type="number"
+                      value={additionalCharges}
+                      onChange={(e) => setAdditionalCharges(e.target.value)}
+                      placeholder="0.00"
+                      step="0.01"
+                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Mini-bar, room service, or other charges</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Notes (Optional)
+                  </label>
+                  <textarea
+                    value={checkoutNotes}
+                    onChange={(e) => setCheckoutNotes(e.target.value)}
+                    placeholder="Any feedback or special notes..."
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-4 mt-8">
+                <button
+                  onClick={() => setShowCheckoutModal(false)}
+                  className="flex-1 px-6 py-4 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCheckout}
+                  disabled={checkoutMutation.isPending}
+                  className="flex-1 px-6 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {checkoutMutation.isPending ? 'Processing...' : 'Confirm Checkout'}
+                </button>
               </div>
             </div>
           </div>

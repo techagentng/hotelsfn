@@ -37,7 +37,7 @@ import {
 import type { CartItem, HousekeepingServiceType, MaintenanceIssueType } from '@/types/tablet';
 
 // For demo purposes - in production, this would come from device/session
-const ROOM_NUMBER = '104';
+const ROOM_NUMBER = '101';
 
 type Page = 'home' | 'menu' | 'orders' | 'services' | 'info';
 
